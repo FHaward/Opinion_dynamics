@@ -5,12 +5,15 @@ from tqdm import tqdm
 
 # Parameters
 np.random.seed(10)
-L = 500  # Size of the lattice (LxL)
-temp = 5*10**24  
+L = 100  # Size of the lattice (LxL)
+temp = 6*10**22  
 k_B = 1.380649 * 10**-23  # Boltzmann constant
-num_iterations = 10000000  # Total number of iterations
-J = 100  # Coupling constant
+num_iterations = (L**2)*1000  # Total number of iterations
+J_b = 1  # Coupling constant
 snapshot_interval = 10000  # Save lattice every 20 steps for animation
+h = -0.01
+J_s = 0
+sigma_s = -1
 
 # Initialize the lattice with random spins (-1 or +1)
 lattice = np.random.choice([-1, 1], size=(L, L))
@@ -28,7 +31,7 @@ plt.ylabel("Y position")
 plt.show()
 
 
-def calculate_energy_change(lattice, i, j, J):
+def calculate_energy_change(lattice, i, j, J_b, h):
     """
     Calculate the energy change that would occur if the spin at (i, j) is flipped.
     """
@@ -44,11 +47,13 @@ def calculate_energy_change(lattice, i, j, J):
     )
     
     # Calculate energy change ΔE
-    E_1 = -J/2*neighbor_sum
-    return -2*E_1
+    social_influence = -J_b*neighbor_sum
+    internal_field = -h*spin
+    leader_influence= -J_s*sigma_s*spin
+    return -2*(social_influence+internal_field+leader_influence)
 
 
-def metropolis_step(lattice, L, J, temp, k_B):
+def metropolis_step(lattice, L, J_b, temp, k_B):
     """
     Perform one Monte Carlo step on the lattice.
     """
@@ -56,7 +61,7 @@ def metropolis_step(lattice, L, J, temp, k_B):
     i, j = np.random.randint(0, L), np.random.randint(0, L)
 
     # Step 3: Calculate the energy change ΔE if the spin at (i, j) is flipped
-    delta_E = calculate_energy_change(lattice, i, j, J)
+    delta_E = calculate_energy_change(lattice, i, j, J_b, h)
 
     # Step 4: Generate a random number r such that 0 < r < 1
     r = np.random.rand()
@@ -68,7 +73,7 @@ def metropolis_step(lattice, L, J, temp, k_B):
 
 # Main simulation loop with snapshot saving
 for step in tqdm(range(num_iterations)):
-    metropolis_step(lattice, L, J, temp, k_B)
+    metropolis_step(lattice, L, J_b, temp, k_B)
     
     # Save the lattice snapshot every 'snapshot_interval' steps
     if step % snapshot_interval == 0:
