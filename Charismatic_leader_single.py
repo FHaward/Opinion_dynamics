@@ -130,13 +130,13 @@ def run_simulation(L, temp, k_B, J_b, h_b, h_s, J_s, num_iterations, seeds, reca
 L = 100  # Size of the lattice (LxL)
 temp = 6e22  
 k_B = 1.380649e-23  # Boltzmann constant
-num_iterations = (L**2)*100  # Total number of iterations
+num_iterations = (L**2)*500  # Total number of iterations
 J_b = 1  # Coupling constant
 J_s = 0
 h_b= 0
 h_s = 0
 snapshot_interval = 1000  # Save lattice every 20 steps for animation
-seeds = [1,2,3]
+seeds = [0,1,2,3,4,5,6,7,8,9]
 recalculation_interval = 10*(L**2)
 
 

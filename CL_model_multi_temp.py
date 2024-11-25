@@ -5,9 +5,7 @@ from tqdm import tqdm
 from joblib import Parallel, delayed
 
 def calculate_energy_change(lattice, L, i, j, J_b, h_b,J_s, sigma_s):
-    """
-    Calculate the energy change that would occur if the spin at (i, j) is flipped.
-    """
+
     # Get the spin at the selected site
     spin = lattice[i, j]
     
@@ -26,9 +24,7 @@ def calculate_energy_change(lattice, L, i, j, J_b, h_b,J_s, sigma_s):
     return -2*(social_influence+internal_field+leader_influence)
 
 def calculate_energy_change_zealot(lattice, L, i, j, J_b, h_s):
-    """
-    Calculate the energy change that would occur if the spin at (i, j) is flipped.
-    """
+
     # Get the spin at the selected site
     spin = lattice[i, j]
     
@@ -46,9 +42,7 @@ def calculate_energy_change_zealot(lattice, L, i, j, J_b, h_s):
     return -2*(social_influence+leader_field)
 
 def metropolis_step(lattice, L, J_b, h_b, h_s, J_s, sigma_s, lookup_table):
-    """
-    Perform one Monte Carlo step on the lattice.
-    """
+
 
     i, j = np.random.randint(0, L), np.random.randint(0, L)
 
@@ -65,6 +59,7 @@ def metropolis_step(lattice, L, J_b, h_b, h_s, J_s, sigma_s, lookup_table):
     return sigma_s  # Return updated sigma_s if changed, else the original
 
 def run_simulation_for_seed(seed, L, temp, k_B, J_b, h_b, h_s, J_s, num_iterations, recalculation_interval, lookup_table):
+   
     np.random.seed(seed)
     lattice = np.random.choice([-1, 1], size=(L, L))
     if lattice[(L // 2), (L // 2)] == -1:
@@ -79,7 +74,7 @@ def run_simulation_for_seed(seed, L, temp, k_B, J_b, h_b, h_s, J_s, num_iteratio
     recalculation_index = 1
 
     # Loop over each interval
-    for interval in tqdm(range(num_intervals), desc=f"Seed {seed}"):
+    for interval in tqdm(range(num_intervals), desc=f"Temp {temp}, Seed {seed}"):
         for step in range(recalculation_interval):
             sigma_s = metropolis_step(lattice, L, J_b, h_b, h_s, J_s, sigma_s, lookup_table)
 
@@ -107,7 +102,9 @@ def parallel_run_simulation(L, temp, k_B, J_b, h_b, h_s, J_s, num_iterations, re
     return results
 
 def create_lookup_table( temp, k_B, J_b, h_b, h_s, J_s):
-
+    if temp == 0:
+        temp = 1e-10  # Use a small number to avoid division by zero
+    
     # Define the possible values of ΔE (based on neighbors and fields)
     possible_neighbor_sums = np.array([-4, -2, 0, 2, 4])  # Neighboring spins sum possibilities
     possible_internal_field= np.array([h_b,-h_b,0])
@@ -131,6 +128,27 @@ def create_lookup_table( temp, k_B, J_b, h_b, h_s, J_s):
 
     return lookup_table
 
+def run_simulation_for_temperature(temp, L, k_B, J_b, h_b, h_s, J_s, num_iterations, recalculation_interval, seeds):
+    
+    lookup_table = create_lookup_table(temp, k_B, J_b, h_b, h_s, J_s)
+    all_magnetizations = parallel_run_simulation(L, temp, k_B, J_b, h_b, h_s, J_s, num_iterations, recalculation_interval, seeds, lookup_table)
+    
+    return temp, all_magnetizations
+
+def run_simulation_over_temperatures(temperatures, L, k_B, J_b, h_b, h_s, J_s, num_iterations, recalculation_interval, seeds):
+
+    # Use joblib to run the simulation for each temperature in parallel
+    results = Parallel(n_jobs=-1)(  # -1 uses all available cores
+        delayed(run_simulation_for_temperature)(
+            temp, L, k_B, J_b, h_b, h_s, J_s, num_iterations, recalculation_interval, seeds
+        ) for temp in temperatures
+    )
+    
+    # Convert the list of results into a dictionary with temperature as the key
+    results_dict = {temp: magnetizations for temp, magnetizations in results}
+    
+    return results_dict
+
 def post_process_results(all_magnetizations):
     # Extract the final magnetizations directly using array slicing
     all_magnetizations = np.array(all_magnetizations)
@@ -153,7 +171,7 @@ def post_process_results(all_magnetizations):
     g_plus = np.count_nonzero(positive_indices) / total_runs
     g_minus = np.count_nonzero(negative_indices) / total_runs
       
-    average_magnetization_across_runs_p = np.mean(all_magnetizations_p, axis=0)
+    average_magnetization_across_runs_p = np.mean(all_magnetizations, axis=0)
     
 
     return average_magnetization_across_runs_p, m_plus_avg_p, m_minus_avg_p, g_plus, g_minus, m_plus, m_minus
@@ -211,22 +229,25 @@ def plot_magnetization_over_time(all_magnetizations):
 
 # Parameters
 L = 50  # Size of the lattice (LxL)
-temp = 2 #6e22  
-k_B = 1    #.380649e-23  # Boltzmann constant
-num_iterations = (L**2)*5000  # Total number of iterations
+temp = 6e22  
+k_B = 1     #.380649e-23  # Boltzmann constant
+num_iterations = (L**2)*1000  # Total number of iterations
 J_b = 1  # Coupling constant
 J_s = 0
 h_b= 0
 h_s = 0
-seeds = np.linspace(0,50,51).astype(int).tolist()
+seeds = np.linspace(0,9,10).astype(int).tolist()
 recalculation_interval = 2*(L**2)
+temperatures = np.linspace(0,4,11).tolist()
 
-lookup_table = create_lookup_table(temp, k_B, J_b, h_b, h_s, J_s,)
-# Run simulations in parallel with individual progress bars
-all_magnetizations_p = parallel_run_simulation(L, temp, k_B, J_b, h_b, h_s, J_s, num_iterations, recalculation_interval, seeds, lookup_table)
-# Post-process the results
-average_magnetization_across_runs_p, m_plus_avg_p, m_minus_avg_p, g_plus_p, g_minus_p, m_plus_p, m_minus_p = post_process_results(all_magnetizations_p)
 
-plot_average_magnetization(average_magnetization_across_runs_p)
+# Run the simulation for all temperatures in parallel
+simulation_results = run_simulation_over_temperatures(temperatures, L, k_B, J_b, h_b, h_s, J_s, num_iterations, recalculation_interval, seeds)
+
+# Access results for a specific temperature (e.g., T = 3)
+temperature_results = simulation_results[1]
+
+all_magnetizations_p = simulation_results[2.4]
+
 plot_magnetization_over_time(all_magnetizations_p)
 
