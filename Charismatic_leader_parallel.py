@@ -131,9 +131,12 @@ def create_lookup_table( temp, k_B, J_b, h_b, h_s, J_s):
 
     return lookup_table
 
-def post_process_results(all_magnetizations):
+
+def post_process_results(all_magnetizations, burn_in=0):
     # Extract the final magnetizations directly using array slicing
     all_magnetizations = np.array(all_magnetizations)
+    if burn_in > 0:
+        all_magnetizations = all_magnetizations[:, burn_in:]
     final_magnetizations = all_magnetizations[:, -1]
 
     # Identify indices of runs ending with positive or negative magnetization
@@ -153,10 +156,11 @@ def post_process_results(all_magnetizations):
     g_plus = np.count_nonzero(positive_indices) / total_runs
     g_minus = np.count_nonzero(negative_indices) / total_runs
       
-    average_magnetization_across_runs_p = np.mean(all_magnetizations_p, axis=0)
+    average_magnetization_across_runs_p = np.mean(all_magnetizations, axis=0)
     
 
-    return average_magnetization_across_runs_p, m_plus_avg_p, m_minus_avg_p, g_plus, g_minus, m_plus, m_minus
+    return average_magnetization_across_runs_p, m_plus_avg_p, m_minus_avg_p, g_plus, g_minus
+
 
 def plot_average_magnetization(average_magnetization):
     """
@@ -211,21 +215,23 @@ def plot_magnetization_over_time(all_magnetizations):
 
 # Parameters
 L = 50  # Size of the lattice (LxL)
-temp = 2 #6e22  
+temp = 1 #6e22  
 k_B = 1    #.380649e-23  # Boltzmann constant
-num_iterations = (L**2)*5000  # Total number of iterations
+num_iterations = (L**2)*500  # Total number of iterations
 J_b = 1  # Coupling constant
-J_s = 0
-h_b= 0
-h_s = 0
-seeds = np.linspace(0,50,51).astype(int).tolist()
+J_s = 1.01
+h_b= -1
+h_s = 1
+seeds = np.linspace(1,20,20).astype(int).tolist()
 recalculation_interval = 2*(L**2)
+
+
 
 lookup_table = create_lookup_table(temp, k_B, J_b, h_b, h_s, J_s,)
 # Run simulations in parallel with individual progress bars
 all_magnetizations_p = parallel_run_simulation(L, temp, k_B, J_b, h_b, h_s, J_s, num_iterations, recalculation_interval, seeds, lookup_table)
 # Post-process the results
-average_magnetization_across_runs_p, m_plus_avg_p, m_minus_avg_p, g_plus_p, g_minus_p, m_plus_p, m_minus_p = post_process_results(all_magnetizations_p)
+average_magnetization_across_runs_p, m_plus_avg_p, m_minus_avg_p, g_plus_p, g_minus_p = post_process_results(all_magnetizations_p)
 
 plot_average_magnetization(average_magnetization_across_runs_p)
 plot_magnetization_over_time(all_magnetizations_p)

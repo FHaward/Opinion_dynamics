@@ -84,16 +84,17 @@ def metropolis_step(lattice, L, J_b, h_b, h_s, J_s, temp, k_B, sigma_s, total_ma
 
 
 # Parameters
-np.random.seed(10)
-L = 100  # Size of the lattice (LxL)
+np.random.seed(46)
+L = 50  # Size of the lattice (LxL)
+N=L**2
 k_B = 1.380649 * 10**-23  # Boltzmann constant
-temp = 0.001  #avoid division by zero error
-num_iterations = (L**2)*300  # Total number of iterations
+temp = 1  #avoid division by zero error
+num_iterations = N*100  # Total number of iterations
 J_b = 1  # Coupling constant
-J_s = 0
-h_b= 0
-h_s = 0
-snapshot_interval = (L**2)  # Save lattice every 20 steps for animation
+J_s = 1.01
+h_b = -1
+h_s = 1
+snapshot_interval = 2*N  # Save lattice every 20 steps for animation
 
 
 
