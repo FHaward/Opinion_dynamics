@@ -14,8 +14,9 @@ def calculate_energy_change(lattice, L, i, j, J_b, h_b, J_s, zealot_spin, magnet
     social_influence = -J_b*(magnetization-spin)*spin
     internal_field = -h_b*spin
     leader_influence= -J_s*zealot_spin*spin
-    
-    return -2*(social_influence+internal_field+leader_influence)
+    delta_E = -2*(social_influence+internal_field+leader_influence)
+    # Prevent overflow by limiting very large values
+    return np.clip(delta_E, -700, 700)  # exp(±700) is near the limits of float64
 
 def calculate_energy_change_zealot(zealot_spin, magnetization, L, J_s, h_s):
     """
@@ -24,7 +25,9 @@ def calculate_energy_change_zealot(zealot_spin, magnetization, L, J_s, h_s):
 
     leader_field = -h_s*zealot_spin
     leader_influence = -J_s*zealot_spin*magnetization 
-    return -2*(leader_influence+leader_field)
+    delta_E = -2*(leader_influence+leader_field)
+    # Prevent overflow by limiting very large values
+    return np.clip(delta_E, -700, 700)  # exp(±700) is near the limits of float64
 
 def metropolis_step(lattice, L, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, magnetization):
     """
