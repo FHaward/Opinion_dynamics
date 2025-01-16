@@ -30,6 +30,7 @@ def calculate_energy_change_zealot(zealot_spin, magnetization, L, J_s, h_s):
 
     leader_field = -h_s*zealot_spin
     leader_influence = -J_s*zealot_spin*magnetization 
+    
     return -2*(leader_influence+leader_field)
 
 def metropolis_step(lattice, L, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, magnetization):
@@ -108,7 +109,7 @@ def parallel_run_simulation(L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, nu
 
 def run_simulation_for_temperature(temp, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, seeds):
     if temp == 0:
-     temp = 1e-10 
+     temp = 1e-3 
     all_magnetizations = parallel_run_simulation(L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, seeds)
     
     return temp, all_magnetizations
@@ -325,9 +326,8 @@ def plot_m_plus_minus_vs_temperature(results):
     plt.plot(temperatures, m_minus_avgs, marker="s", label="$m_-$ (Average Negative Magnetization)", color="orange")
 
     # Add labels, title, and grid
-    plt.xlabel("Temperature")
-    plt.ylabel("Average Magnetization")
-    plt.title("$m_+$ and $m_-$ vs. Temperature")
+    plt.xlabel("Temperature", fontsize=14)
+    plt.ylabel("Average Magnetization", fontsize=14)
     plt.grid(True)
     plt.legend()
 
@@ -355,7 +355,7 @@ temperatures
 # Run the simulation for all temperatures in parallel
 simulation_results = run_simulation_over_temperatures(temperatures, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, seeds)
  
-all_magnetizations_p = simulation_results[1]
+all_magnetizations_p = simulation_results[1e-3]
 plot_magnetization_over_time(all_magnetizations_p)
 
 processed_results_lists = process_simulation_results_to_lists(simulation_results, burn_in_steps)
@@ -371,3 +371,4 @@ print(f"Peak memory usage: {peak / 1024 / 1024:.2f} MB")
 
 tracemalloc.stop()
 
+processed_results_lists = {'temperatures': [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.44999999999999996, 0.5, 0.5499999999999999, 0.6, 0.6499999999999999, 0.7, 0.7499999999999999, 0.7999999999999999, 0.8499999999999999, 0.8999999999999999, 0.95, 0.9999999999999999, 1.05, 1.0999999999999999, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.45, 1.5], 'average_magnetizations': [np.float64(0.3), np.float64(0.09999714285714287), np.float64(0.3999457142857143), np.float64(0.2996257142857143), np.float64(0.29847714285714283), np.float64(0.39551714285714284), np.float64(0.4897142857142857), np.float64(0.6826142857142857), np.float64(0.48063142857142854), np.float64(0.7503314285714286), np.float64(0.7295399999999999), np.float64(0.3539771428571428), np.float64(0.588957142857143), np.float64(0.3977542857142858), np.float64(0.36994285714285713), np.float64(0.46163714285714286), np.float64(0.5059228571428571), np.float64(0.4312000000000001), np.float64(0.29695714285714286), np.float64(0.16223142857142858), np.float64(0.09267714285714285), np.float64(0.062351428571428565), np.float64(0.04607142857142857), np.float64(0.03783999999999999), np.float64(0.02911142857142857), np.float64(0.02169714285714286), np.float64(0.02106857142857143), np.float64(0.024785714285714286), np.float64(0.024414285714285715)], 'm_plus_avgs': [np.float64(1.0), np.float64(0.9999948051948052), np.float64(0.9999224489795919), np.float64(0.9994241758241759), np.float64(0.9976571428571431), np.float64(0.993595918367347), np.float64(0.9859999999999998), np.float64(0.9748033613445378), np.float64(0.9593104761904763), np.float64(0.9374317460317461), np.float64(0.9107492063492064), np.float64(0.8765959183673468), np.float64(0.8381848739495799), np.float64(0.7856380952380951), np.float64(0.723862857142857), np.float64(0.6511932773109242), np.float64(0.5577233082706767), np.float64(0.4312000000000001), np.float64(0.29695714285714286), np.float64(0.16223142857142858), np.float64(0.09827226890756302), np.float64(0.06603609022556392), np.float64(0.04607142857142857), np.float64(0.04280380952380952), np.float64(0.030723809523809528), np.float64(0.02510204081632653), np.float64(0.022706122448979592), np.float64(0.024023529411764707), np.float64(0.02337142857142857)], 'm_minus_avgs': [np.float64(-1.0), np.float64(-1.0), np.float64(-1.0), np.float64(-1.0), np.float64(-1.0), np.float64(-1.0), np.float64(-0.9991428571428571), np.float64(-0.9731238095238094), np.float64(-0.9554057142857145), np.float64(-0.9335714285714285), np.float64(-0.9013428571428571), np.float64(-0.8654666666666666), np.float64(-0.8233333333333335), np.float64(-0.7658971428571427), np.float64(-0.6918171428571428), np.float64(-0.6125142857142857), np.float64(-0.47828571428571426), 0, 0, 0, np.float64(0.06097142857142857), np.float64(-0.007657142857142858), 0, np.float64(0.022948571428571426), np.float64(0.014599999999999997), np.float64(0.01375238095238095), np.float64(0.01724761904761905), np.float64(0.021200000000000004), np.float64(0.030323809523809524)], 'g_plus_list': [0.65, 0.55, 0.7, 0.65, 0.65, 0.7, 0.75, 0.85, 0.75, 0.9, 0.9, 0.7, 0.85, 0.75, 0.75, 0.85, 0.95, 1.0, 1.0, 1.0, 0.85, 0.95, 1.0, 0.75, 0.9, 0.7, 0.7, 0.85, 0.85], 'g_minus_list': [0.35, 0.45, 0.3, 0.35, 0.35, 0.3, 0.25, 0.15, 0.25, 0.1, 0.1, 0.3, 0.15, 0.25, 0.25, 0.15, 0.05, 0.0, 0.0, 0.0, 0.15, 0.05, 0.0, 0.25, 0.1, 0.3, 0.3, 0.1, 0.15]}

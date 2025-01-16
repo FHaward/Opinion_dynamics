@@ -14,9 +14,8 @@ def calculate_energy_change(lattice, L, i, j, J_b, h_b, J_s, zealot_spin, magnet
     social_influence = -J_b*(magnetization-spin)*spin
     internal_field = -h_b*spin
     leader_influence= -J_s*zealot_spin*spin
-    delta_E = -2*(social_influence+internal_field+leader_influence)
-    # Prevent overflow by limiting very large values
-    return np.clip(delta_E, -700, 700)  # exp(±700) is near the limits of float64
+    
+    return -2*(social_influence+internal_field+leader_influence)
 
 def calculate_energy_change_zealot(zealot_spin, magnetization, L, J_s, h_s):
     """
@@ -25,9 +24,8 @@ def calculate_energy_change_zealot(zealot_spin, magnetization, L, J_s, h_s):
 
     leader_field = -h_s*zealot_spin
     leader_influence = -J_s*zealot_spin*magnetization 
-    delta_E = -2*(leader_influence+leader_field)
-    # Prevent overflow by limiting very large values
-    return np.clip(delta_E, -700, 700)  # exp(±700) is near the limits of float64
+    return -2*(leader_influence+leader_field)
+
 
 def metropolis_step(lattice, L, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, magnetization):
     """
@@ -105,7 +103,7 @@ def parallel_run_simulation(L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, nu
 
 def run_simulation_for_temperature(temp, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, seeds):
     if temp == 0:
-     temp = 1e-10 
+     temp = 1e-2 
     all_magnetizations = parallel_run_simulation(L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, seeds)
     
     return temp, all_magnetizations
@@ -203,8 +201,8 @@ J_s = 1.01
 h_b= -1
 h_s = N
 number_of_MC_steps = 2
-seeds = np.linspace(1,4,4).astype(int).tolist()
-temperatures = np.linspace(0,1.5,4).tolist()
+seeds = np.linspace(1,20,20).astype(int).tolist()
+temperatures = np.linspace(0.1,1.5,29).tolist()
 burn_in_steps = int((num_iterations/(number_of_MC_steps*N))*0.5)
 
 
@@ -214,5 +212,4 @@ simulation_results = run_simulation_over_temperatures(temperatures, L, N, k_B, J
 
 processed_results_lists = process_simulation_results_to_lists(simulation_results, burn_in_steps)
 
-
-processed_results_lists
+print(processed_results_lists)
