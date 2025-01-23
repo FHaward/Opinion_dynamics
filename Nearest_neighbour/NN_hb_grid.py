@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from tqdm import tqdm
+import os
 
 def calculate_energy_change(lattice, L, i, j, J_b, h_b, J_s, zealot_spin):
     """
@@ -130,53 +131,164 @@ L = 100
 N = L**2
 zealot_spin = 1
 k_B = 1
-num_iterations = N*500  # Total number of iterations
-J_b = 1.0/4
-J_s = 1.00
-h_b = -1.0
-h_s = N
+num_iterations = N*200  # Total number of iterations
+J_b = 1
+J_s = 0
+h_b = 0
+h_s = 0
 number_of_MC_steps = 2
 seed = 10
 temp = 0.5
-
-# Run the simulation
-lookup_table = create_lookup_table(temp, k_B, J_b, h_b, h_s, J_s,)
-magnetization, lattice_snapshots = run_simulation_with_snapshots(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, lookup_table)
+save_dir = r"C:\Users\frase\Documents\Durham\4th Year\1Project\Formative Presentation\vs graphs"
 
 
+# Define h_b values to test
+h_b_values = [-0.05, -0.025, 0.0, 0.025, 0.05]
+frame_indices = [0, 2, 5, 10, 20]
 
-# Set up the figure for animation
-fig, ax = plt.subplots(figsize=(6, 6))
-im = ax.imshow(lattice_snapshots[0], cmap="coolwarm", interpolation="nearest")
-ax.set_title("Lattice Evolution")
-ax.set_xlabel("X Position")
-ax.set_ylabel("Y Position")
-plt.colorbar(im, label="Spin")
+# Create a figure with a grid of subplots
+fig, axes = plt.subplots(len(h_b_values), len(frame_indices), figsize=(15, 15))
 
-# Update function for animation
-def update(frame):
-    im.set_array(lattice_snapshots[frame])
-    return [im]
+# Run simulations and create visualizations for each h_b value
+for i, h_b in enumerate(h_b_values):
+    # Create lookup table and run simulation
+    lookup_table = create_lookup_table(temp, k_B, J_b, h_b, h_s, J_s)
+    magnetization, lattice_snapshots = run_simulation_with_snapshots(
+        seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, 
+        num_iterations, number_of_MC_steps, lookup_table
+    )
+    
+    # Plot snapshots at specified frames
+    for j, frame in enumerate(frame_indices):
+        ax = axes[i, j]
+        im = ax.imshow(lattice_snapshots[frame], cmap="coolwarm", interpolation="nearest")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        
+        # Add titles only to top row and left column
+        if i == 0:
+            ax.set_title(f'Step {frame}', fontsize=16)
+        if j == 0:
+            ax.set_ylabel(f'h = {h_b}', fontsize=16)
 
-# Create the animation
-ani = animation.FuncAnimation(
-    fig, update, frames=len(lattice_snapshots), blit=True, interval=50, repeat=False
-)
-ani.save('cl_animation.gif', writer='pillow', fps=30)
+# Add a colorbar
+cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
+fig.colorbar(im, cax=cbar_ax, label='Spin')
+cbar_ax.tick_params(labelsize=16)
 
-# Display the animation
+
+plt.tight_layout()
+plt.subplots_adjust(right=0.9)
 plt.show()
 
 
 
-time_steps = np.arange(len(magnetization)) * number_of_MC_steps
+def generate_simulation_data(L=100, N=None, zealot_spin=1, k_B=1, num_iterations=None,
+                           J_b=1, J_s=0, h_s=0, number_of_MC_steps=2, seed=10, 
+                           temp=0.5, h_b_values=None):
+    """
+    Generate simulation data for multiple h_b values.
+    
+    Returns:
+    dict: Contains simulation results for each h_b value with structure:
+        {h_b: (magnetization_array, lattice_snapshots)}
+    """
+    if N is None:
+        N = L**2
+    if num_iterations is None:
+        num_iterations = N*200
+    if h_b_values is None:
+        h_b_values = [-0.05, -0.025, 0.0, 0.025, 0.05]
+        
+    simulation_results = {}
+    
+    for h_b in h_b_values:
+        # Create lookup table and run simulation
+        lookup_table = create_lookup_table(temp, k_B, J_b, h_b, h_s, J_s)
+        magnetization, lattice_snapshots = run_simulation_with_snapshots(
+            seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, 
+            num_iterations, number_of_MC_steps, lookup_table
+        )
+        simulation_results[h_b] = (magnetization, lattice_snapshots)
+    
+    return simulation_results
+def plot_simulation_results(simulation_results, frame_indices=None, cmap=None):
+    """
+    Create visualization of simulation results with consistent spacing and adjustments.
+    
+    Parameters:
+    simulation_results : dict
+        Output from generate_simulation_data()
+    frame_indices : list, optional
+        Indices of frames to display (default is DEFAULT_FRAME_INDICES)
+    cmap : str, optional
+        Colormap for the visualization (default is DEFAULT_CMAP)
+    """
+    if frame_indices is None:
+        frame_indices = DEFAULT_FRAME_INDICES
+    if cmap is None:
+        cmap = DEFAULT_CMAP
 
-plt.figure(figsize=(10, 5))
-plt.plot(time_steps, magnetization, label="Average Magnetization", color="b")
-plt.xlabel("Monte Carlo Steps")
-plt.ylabel("Average Magnetization")
-plt.title("Magnetization Over Time")
-plt.grid(True)
-plt.legend()
-plt.tight_layout()
+    h_b_values = sorted(simulation_results.keys())
+
+    # Create figure with subplots
+    fig, axes = plt.subplots(len(h_b_values), len(frame_indices),
+                             figsize=FIGSIZE, constrained_layout=True)
+    fig.suptitle('Lattice Evolution for Different h_b Values', 
+                 fontsize=TITLE_SIZE, y=TITLE_Y_POS)  # Adjusted title position
+
+    # Plot snapshots for each h_b value and frame
+    for i, h_b in enumerate(h_b_values):
+        magnetization, lattice_snapshots = simulation_results[h_b]
+
+        for j, frame in enumerate(frame_indices):
+            ax = axes[i, j]
+            im = ax.imshow(lattice_snapshots[frame], cmap=cmap, 
+                          interpolation="nearest")
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+            # Add titles only to top row and left column
+            if i == 0:
+                ax.set_title(f'Step {frame}', fontsize=LABEL_SIZE, pad=10)
+            if j == 0:
+                ax.set_ylabel(f'h_b = {h_b}', fontsize=LABEL_SIZE, labelpad=10)
+
+    # Add colorbar with consistent sizing
+    cbar_ax = fig.add_axes(CBAR_AX_POSITION)  # Adjusted for additional white space
+    cbar = fig.colorbar(im, cax=cbar_ax)
+    cbar.ax.set_ylabel('Spin', fontsize=LABEL_SIZE, rotation=270, labelpad=20)
+    cbar.ax.tick_params(labelsize=LABEL_SIZE)
+
+    # Adjust spacing for uniform subplot layout
+    fig.subplots_adjust(wspace=SUBPLOT_WSPACE, hspace=SUBPLOT_HSPACE, 
+                        left=SUBPLOT_LEFT, right=SUBPLOT_RIGHT, 
+                        top=SUBPLOT_TOP, bottom=SUBPLOT_BOTTOM)
+
+    return fig, axes
+
+
+
+
+# Adjustable parameters
+TITLE_SIZE = 16
+LABEL_SIZE = 14
+FIGSIZE = (16, 16)
+TITLE_Y_POS = 0.95
+CBAR_AX_POSITION = [0.92, 0.15, 0.02, 0.7]
+SUBPLOT_WSPACE = 0.3
+SUBPLOT_HSPACE = 0.3
+SUBPLOT_LEFT = 0.08
+SUBPLOT_RIGHT = 0.9
+SUBPLOT_TOP = 0.9
+SUBPLOT_BOTTOM = 0.08
+DEFAULT_FRAME_INDICES = [0, 2, 5, 10, 20]
+DEFAULT_CMAP = "coolwarm"
+
+
+simulation_results = generate_simulation_data()
+
+fig, axes = plot_simulation_results(simulation_results)
+save_path = os.path.join(save_dir, "NN_h_b_grid.png")
+plt.savefig(save_path)
 plt.show()

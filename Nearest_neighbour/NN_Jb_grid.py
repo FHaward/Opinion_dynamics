@@ -130,53 +130,51 @@ L = 100
 N = L**2
 zealot_spin = 1
 k_B = 1
-num_iterations = N*500  # Total number of iterations
-J_b = 1.0/4
-J_s = 1.00
-h_b = -1.0
-h_s = N
+num_iterations = N*200  # Total number of iterations
+J_b = 1
+J_s = 0
+h_b = 0
+h_s = 0
 number_of_MC_steps = 2
 seed = 10
 temp = 0.5
 
-# Run the simulation
-lookup_table = create_lookup_table(temp, k_B, J_b, h_b, h_s, J_s,)
-magnetization, lattice_snapshots = run_simulation_with_snapshots(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, lookup_table)
+
+# Define h_b values to test
+J_b_values = [0.1, 0.25, 0.5, 0.75, 1]
+frame_indices = [0, 5, 10, 15, 20]
 
 
+# Create a figure with a grid of subplots
+fig, axes = plt.subplots(len(J_b_values), len(frame_indices), figsize=(15, 15))
 
-# Set up the figure for animation
-fig, ax = plt.subplots(figsize=(6, 6))
-im = ax.imshow(lattice_snapshots[0], cmap="coolwarm", interpolation="nearest")
-ax.set_title("Lattice Evolution")
-ax.set_xlabel("X Position")
-ax.set_ylabel("Y Position")
-plt.colorbar(im, label="Spin")
+# Run simulations and create visualizations for each J_b value
+for i, J_b in enumerate(J_b_values):
+    # Create lookup table and run simulation
+    lookup_table = create_lookup_table(temp, k_B, J_b, h_b, h_s, J_s)
+    magnetization, lattice_snapshots = run_simulation_with_snapshots(
+        seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, 
+        num_iterations, number_of_MC_steps, lookup_table
+    )
+    
+    # Plot snapshots at specified frames
+    for j, frame in enumerate(frame_indices):
+        ax = axes[i, j]
+        im = ax.imshow(lattice_snapshots[frame], cmap="coolwarm", interpolation="nearest")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        
+        # Add titles only to top row and left column
+        if i == 0:
+            ax.set_title(f'Step {frame}', fontsize=16)
+        if j == 0:
+            ax.set_ylabel(f'J = {J_b}', fontsize=16)
 
-# Update function for animation
-def update(frame):
-    im.set_array(lattice_snapshots[frame])
-    return [im]
+# Add a colorbar
+cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
+fig.colorbar(im, cax=cbar_ax, label='Spin')
+cbar_ax.tick_params(labelsize=16)
 
-# Create the animation
-ani = animation.FuncAnimation(
-    fig, update, frames=len(lattice_snapshots), blit=True, interval=50, repeat=False
-)
-ani.save('cl_animation.gif', writer='pillow', fps=30)
-
-# Display the animation
-plt.show()
-
-
-
-time_steps = np.arange(len(magnetization)) * number_of_MC_steps
-
-plt.figure(figsize=(10, 5))
-plt.plot(time_steps, magnetization, label="Average Magnetization", color="b")
-plt.xlabel("Monte Carlo Steps")
-plt.ylabel("Average Magnetization")
-plt.title("Magnetization Over Time")
-plt.grid(True)
-plt.legend()
 plt.tight_layout()
+plt.subplots_adjust(right=0.9)
 plt.show()
