@@ -3,11 +3,8 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from tqdm import tqdm
 from joblib import Parallel, delayed
-
+import itertools
 import time
-import multiprocessing
-m_cores = multiprocessing.cpu_count()
-m_cores
 
 
 def calculate_energy_change(lattice, L, i, j, J_b, h_b, J_s, zealot_spin):
@@ -40,6 +37,45 @@ def calculate_energy_change_zealot(zealot_spin, magnetization, L, J_s, h_s):
     leader_influence = -J_s*zealot_spin*magnetization 
     return -2*(leader_influence+leader_field)
 
+def safe_exp(delta_E, temp, k_B):
+    """
+    Compute exp(-ΔE/kT) for large energy changes without try/except.
+    Uses direct value checks to prevent overflow/underflow.
+    """
+    beta_delta_E = -delta_E / (k_B * temp)
+    
+    # For large negative values, return exp(700) as upper limit
+    if beta_delta_E > 700:  # exp(700) is near the maximum float64 can handle
+        return np.exp(700)
+    # For large positive values, return exp(-700) as lower limit
+    elif beta_delta_E < -700:
+        return np.exp(-700)
+    # For manageable values, compute normally
+    else:
+        return np.exp(beta_delta_E)
+   
+def create_lookup_table(temp, k_B, J_b, h_b, J_s):
+    # Define the possible values of ΔE (based on neighbors and fields)
+    possible_neighbor_sums = np.array([-4, -2, 0, 2, 4])  # Neighboring spins sum possibilities
+    possible_internal_field= np.array([h_b,-h_b])
+    possible_leader_influence= np.array([J_s,-J_s])
+
+    # Combine the two contributions to calculate all ΔE values
+    delta_E_values = []
+    for neighbor_sum in possible_neighbor_sums:
+        for internal_field in possible_internal_field:
+            for leader_influence in possible_leader_influence:
+                    delta_E = -2 * ((J_b*neighbor_sum)+internal_field+leader_influence)
+                    delta_E_values.append(delta_E)
+
+    # Remove duplicates and sort
+    delta_E_values = np.unique(delta_E_values)
+
+    # Precompute exponential values for all ΔE
+    lookup_table = {delta_E: safe_exp(delta_E, temp, k_B) for delta_E in delta_E_values}
+
+    return lookup_table
+
 def metropolis_step(lattice, L, J_b, h_b, h_s, J_s, zealot_spin, lookup_table):
     """
     Perform one Monte Carlo step on the lattice.
@@ -50,9 +86,11 @@ def metropolis_step(lattice, L, J_b, h_b, h_s, J_s, zealot_spin, lookup_table):
     
     if np.random.rand() < lookup_table.get(delta_E, 0):
         lattice[i, j] *= -1  # Flip the spin
-    
-def run_simulation_for_seed(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, lookup_table):
+  
+def run_individual_simulation(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps):
     np.random.seed(seed)
+    lookup_table = create_lookup_table(temp, k_B, J_b, h_b, J_s)
+
     lattice = np.random.choice([-1, 1], size=(L, L))
     magnetization_record_interval = number_of_MC_steps * N
 
@@ -72,7 +110,7 @@ def run_simulation_for_seed(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_sp
 
             magnetization = np.sum(lattice)
             delta_E_zealot = calculate_energy_change_zealot(zealot_spin, magnetization, L, J_s, h_s)
-            if np.random.rand() < np.exp(-delta_E_zealot / (k_B * temp)):
+            if np.random.rand() < safe_exp(delta_E_zealot, temp, k_B):
                 zealot_spin *= -1  # Flip the spin
 
         magnetization_array[recalculation_index] = magnetization
@@ -92,7 +130,7 @@ def run_simulation_for_seed(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_sp
             # Update zealot spin every L^2 steps
             magnetization = np.sum(lattice)
             delta_E_zealot = calculate_energy_change_zealot(zealot_spin, magnetization, L, J_s, h_s)
-            if np.random.rand() < np.exp(-delta_E_zealot / (k_B * temp)):
+            if np.random.rand() < safe_exp(delta_E_zealot, temp, k_B):
                 zealot_spin *= -1
 
         # Handle any remaining steps without a zealot recalculation
@@ -101,90 +139,66 @@ def run_simulation_for_seed(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_sp
 
         magnetization = np.sum(lattice)
         magnetization_array[recalculation_index] = magnetization
+        
+    all_magnetizations = magnetization_array/N
                    
-    return magnetization_array/N
-
-def parallel_run_simulation(L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, seeds, lookup_table):
-    # Run each seed in parallel using joblib
-    results = Parallel(n_jobs=1)(  # -1 uses all available cores
-        delayed(run_simulation_for_seed)(
-            seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, lookup_table
-        ) for seed in seeds
-    )
-    return results
-
-def create_lookup_table( temp, k_B, J_b, h_b, h_s, J_s):
-    # Define the possible values of ΔE (based on neighbors and fields)
-    possible_neighbor_sums = np.array([-4, -2, 0, 2, 4])  # Neighboring spins sum possibilities
-    possible_internal_field= np.array([h_b,-h_b,0])
-    possible_leader_influence= np.array([J_s,-J_s,0])
-    possible_leader_field= np.array([h_s,-h_s,0])
-
-    # Combine the two contributions to calculate all ΔE values
-    delta_E_values = []
-    for neighbor_sum in possible_neighbor_sums:
-        for internal_field in possible_internal_field:
-            for leader_influence in possible_leader_influence:
-                for leader_field in possible_leader_field:
-                    delta_E = -2 * ((J_b*neighbor_sum)+internal_field+leader_influence+leader_field)
-                    delta_E_values.append(delta_E)
-
-    # Remove duplicates and sort
-    delta_E_values = np.unique(delta_E_values)
-
-    # Precompute exponential values for all ΔE
-    lookup_table = {delta_E: np.exp(-delta_E / (k_B * temp)) for delta_E in delta_E_values}
-
-    return lookup_table
-
-def run_simulation_for_temperature(temp, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, seeds):
-    if temp == 0:
-     temp = 1e-10 
-    lookup_table = create_lookup_table(temp, k_B, J_b, h_b, h_s, J_s)
-    all_magnetizations = parallel_run_simulation(L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, seeds, lookup_table)
-    
     return temp, all_magnetizations
-
-def run_simulation_over_temperatures(temperatures, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, seeds):
-
-    # Use joblib to run the simulation for each temperature in parallel
-    results = Parallel(n_jobs=8)(  # -1 uses all available cores
-        delayed(run_simulation_for_temperature)(
-            temp, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, seeds
-        ) for temp in temperatures
+  
+def run_parallel_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps):
+    """
+    Run simulations for all temperature-seed combinations in parallel.
+    """
+    combinations = list(itertools.product(temperatures, seeds))
+    
+    # Run all combinations in parallel
+    results = Parallel(n_jobs=-1)(
+        delayed(run_individual_simulation)(
+            seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps
+        ) for temp, seed in tqdm(combinations, desc="Running simulations")
     )
     
-    # Convert the list of results into a dictionary with temperature as the key
-    results_dict = {temp: magnetizations for temp, magnetizations in results}
+    # Organize results by temperature
+    results_dict = {}
+    for temp, magnetizations in results:
+        if temp not in results_dict:
+            results_dict[temp] = []
+        results_dict[temp].append(magnetizations)
     
-    return results_dict
+    return results_dict 
 
-def post_process_results(all_magnetizations, burn_in=0):
-    # Extract the final magnetizations directly using array slicing
+def post_process_results(all_magnetizations, burn_in_steps):
+    # Convert to numpy array
     all_magnetizations = np.array(all_magnetizations)
-    if burn_in > 0:
-        all_magnetizations = all_magnetizations[:, burn_in:]
-    final_magnetizations = all_magnetizations[:, -1]
-
-    # Identify indices of runs ending with positive or negative magnetization
-    positive_indices = final_magnetizations > 0
-    negative_indices = final_magnetizations < 0
     
-    # Divide the magnetization time series into two groups based on final magnetization
+    # If burn-in steps are applied, remove them
+    if burn_in_steps > 0:
+        all_magnetizations = all_magnetizations[:, burn_in_steps:]
+    
+    # Calculate last 10% of the run
+    last_10_percent_index = int(all_magnetizations.shape[1] * 0.9)
+    
+    # Calculate time-averaged magnetization for the last 10%
+    time_averaged_magnetizations = np.mean(all_magnetizations[:, last_10_percent_index:], axis=1)
+    
+    # Identify indices of runs ending with positive or negative time-averaged magnetization
+    positive_indices = time_averaged_magnetizations > 0
+    negative_indices = time_averaged_magnetizations < 0
+    
+    # Divide the magnetization time series into two groups
     m_plus = all_magnetizations[positive_indices]
     m_minus = all_magnetizations[negative_indices]
     
-    # Compute the average magnetization across all runs and all times (after burn-in)
-    average_magnetization_across_runs_p = np.mean(all_magnetizations)
-
-    # Compute the average magnetization across all runs and all times for each group
-    m_plus_avg_p = np.mean(m_plus) if m_plus.size > 0 else 0
-    m_minus_avg_p = np.mean(m_minus) if m_minus.size > 0 else 0
-
-    # Compute the fraction of runs ending with positive or negative magnetization
+    # Compute averages
+    average_magnetization_across_runs = np.mean(all_magnetizations)
+    m_plus_avg = np.mean(m_plus) if m_plus.size > 0 else 0
+    m_minus_avg = np.mean(m_minus) if m_minus.size > 0 else 0
+    
+    # Compute fractions
     total_runs = all_magnetizations.shape[0]
     g_plus = np.count_nonzero(positive_indices) / total_runs
     g_minus = np.count_nonzero(negative_indices) / total_runs
+    
+    return average_magnetization_across_runs, m_plus_avg, m_minus_avg, g_plus, g_minus
       
 
     return average_magnetization_across_runs_p, m_plus_avg_p, m_minus_avg_p, g_plus, g_minus
@@ -368,87 +382,39 @@ def plot_m_plus_minus_vs_temperature(results):
     plt.show()
 
 
-
-import itertools
-
-# [Previous helper functions remain unchanged up to run_simulation_for_seed]
-
-def run_simulation_for_temp_seed(temp_seed_pair, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps):
-    """
-    Run simulation for a single temperature-seed combination
-    """
-    temp, seed = temp_seed_pair
-    if temp == 0:
-        temp = 1e-10
-    lookup_table = create_lookup_table(temp, k_B, J_b, h_b, h_s, J_s)
-    result = run_simulation_for_seed(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, 
-                                   zealot_spin, num_iterations, number_of_MC_steps, lookup_table)
-    return temp, seed, result
-
-def run_simulation_over_temperatures(temperatures, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, seeds):
-    # Create all temperature-seed combinations
-    temp_seed_combinations = list(itertools.product(temperatures, seeds))
-    
-    # Run all combinations in parallel
-    results = Parallel(n_jobs=-1, backend='loky')(
-        delayed(run_simulation_for_temp_seed)(
-            temp_seed_pair, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, 
-            num_iterations, number_of_MC_steps
-        ) for temp_seed_pair in temp_seed_combinations
-    )
-    
-    # Reorganize results into the expected dictionary format
-    results_dict = {}
-    for temp, seed, result in results:
-        if temp not in results_dict:
-            results_dict[temp] = []
-        results_dict[temp].append(result)
-    
-    return results_dict
-
-
-
-
-
 # Parameters
 L = 50  # Size of the lattice (LxL)
 N=L**2
 zealot_spin = 1
 k_B = 1     #.380649e-23  # Boltzmann constant
-num_iterations = N*10  # Total number of iterations
-J_b = 1/4  # Coupling constant
-J_s = 1.01
-h_b= -1
-h_s = N
-seeds = list(np.linspace(1,20,20, dtype = int))
+num_iterations = N*1000  # Total number of iterations
+J_b = 1#1/4  # Coupling constant
+J_s = 0#1.01
+h_b= 0#-1
+h_s = 0#N
+seeds = list(np.linspace(1,8,8, dtype = int))
 number_of_MC_steps = 2
-temperatures = list(np.linspace(0.1,1.5,30))
+temperatures = list(np.linspace(0.1,1.5,8))
 burn_in_steps = int((num_iterations/(number_of_MC_steps*N))*0.5)
 seeds
 temperatures
-
 start = time.time()
 
 # Run the simulation for all temperatures in parallel
-simulation_results = run_simulation_over_temperatures(temperatures, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, seeds)
-
+simulation_results = run_parallel_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps)
 end = time.time()
 length = end - start
 print("It took", length, "seconds!")
 
 
-all_magnetizations_p = simulation_results[1]
+
+all_magnetizations_p = simulation_results[1.3]
 plot_magnetization_over_time(all_magnetizations_p)
 
 processed_results_lists = process_simulation_results_to_lists(simulation_results, burn_in=burn_in_steps)
 plot_average_magnetizations_vs_temperature(processed_results_lists)
 plot_m_plus_minus_vs_temperature(processed_results_lists)
 plot_g_plus_minus_vs_temperature(processed_results_lists)
-
-
-
-
-create_lookup_table( 1, k_B, J_b, h_b, h_s, J_s)
 
 
 

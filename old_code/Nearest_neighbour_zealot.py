@@ -3,6 +3,10 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from tqdm import tqdm
 from joblib import Parallel, delayed
+import itertools
+
+import time
+
 
 def calculate_energy_change(lattice, L, i, j, J_b, h_b, J_s, zealot_spin):
     """
@@ -367,19 +371,26 @@ L = 50  # Size of the lattice (LxL)
 N=L**2
 zealot_spin = 1
 k_B = 1     #.380649e-23  # Boltzmann constant
-num_iterations = N*500  # Total number of iterations
+num_iterations = N*10  # Total number of iterations
 J_b = 1/4  # Coupling constant
 J_s = 1.01
 h_b= -1
 h_s = N
-seeds = np.linspace(1,8,8).astype(int).tolist()
+seeds = list(np.linspace(1,8,8, dtype = int))
 number_of_MC_steps = 2
-temperatures = np.linspace(0,1.5,7).tolist()
+temperatures = list(np.linspace(0.1,1.5,7))
 burn_in_steps = int((num_iterations/(number_of_MC_steps*N))*0.5)
-
+seeds
 temperatures
+start = time.time()
+
 # Run the simulation for all temperatures in parallel
 simulation_results = run_simulation_over_temperatures(temperatures, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, seeds)
+
+end = time.time()
+length = end - start
+print("It took", length, "seconds!")
+
 
 all_magnetizations_p = simulation_results[1]
 plot_magnetization_over_time(all_magnetizations_p)
@@ -389,3 +400,7 @@ plot_average_magnetizations_vs_temperature(processed_results_lists)
 plot_m_plus_minus_vs_temperature(processed_results_lists)
 plot_g_plus_minus_vs_temperature(processed_results_lists)
 
+
+
+
+create_lookup_table( 1, k_B, J_b, h_b, h_s, J_s)

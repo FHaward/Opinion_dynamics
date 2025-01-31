@@ -1,0 +1,13 @@
+L: 100
+N: 10000
+zealot_spin: 1
+k_B: 1
+num_iterations: 100000
+J_b: 0.25
+J_s: 1.01
+h_b: -1
+h_s: 10000
+number_of_MC_steps: 2
+seeds: [np.int64(1), np.int64(2), np.int64(3), np.int64(4), np.int64(5)]
+temperatures: [np.float64(0.1), np.float64(0.2), np.float64(0.30000000000000004), np.float64(0.4), np.float64(0.5)]
+burn_in_steps: 2
