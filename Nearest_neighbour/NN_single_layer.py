@@ -89,8 +89,8 @@ def metropolis_step(lattice, L, J_b, h_b, h_s, J_s, zealot_spin, lookup_table):
   
 def run_individual_simulation(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps):
     np.random.seed(seed)
+    zealot_spin = np.random.choice([-1, 1])
     lookup_table = create_lookup_table(temp, k_B, J_b, h_b, J_s)
-
     lattice = np.random.choice([-1, 1], size=(L, L))
     magnetization_record_interval = number_of_MC_steps * N
 
@@ -99,7 +99,9 @@ def run_individual_simulation(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_
     num_intervals = num_iterations // magnetization_record_interval
     total_recalculations = num_intervals + 1 + (1 if num_iterations % magnetization_record_interval > 0 else 0)
     magnetization_array = np.zeros(total_recalculations, dtype=np.float64)
+    zealot_array = np.zeros(total_recalculations, dtype=np.float64)
     magnetization_array[0] = np.sum(lattice)
+    zealot_array[0] = zealot_spin
     recalculation_index = 1
 
     # Loop over each interval
@@ -114,6 +116,7 @@ def run_individual_simulation(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_
                 zealot_spin *= -1  # Flip the spin
 
         magnetization_array[recalculation_index] = magnetization
+        zealot_array[recalculation_index] = zealot_spin
         recalculation_index += 1
         
 
@@ -139,10 +142,11 @@ def run_individual_simulation(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_
 
         magnetization = np.sum(lattice)
         magnetization_array[recalculation_index] = magnetization
+        zealot_array[recalculation_index] = zealot_spin
         
     all_magnetizations = magnetization_array/N
                    
-    return temp, all_magnetizations
+    return temp, all_magnetizations, zealot_array
   
 def run_parallel_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps):
     """
@@ -159,185 +163,158 @@ def run_parallel_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s,
     
     # Organize results by temperature
     results_dict = {}
-    for temp, magnetizations in results:
+    for temp, magnetizations, zealot_spins in results:
         if temp not in results_dict:
-            results_dict[temp] = []
-        results_dict[temp].append(magnetizations)
+            results_dict[temp] = {'magnetizations': [], 'zealot_spins': []}
+        results_dict[temp]['magnetizations'].append(magnetizations)
+        results_dict[temp]['zealot_spins'].append(zealot_spins)
     
     return results_dict 
 
-def post_process_results(all_magnetizations, burn_in_steps):
-    # Convert to numpy array
+def post_process_combined_results(all_magnetizations, all_zealot_spins, burn_in_steps, time_average_proportion):
+
+    # Convert inputs to numpy arrays if they aren't already
     all_magnetizations = np.array(all_magnetizations)
+    all_zealot_spins = np.array(all_zealot_spins)
     
-    # If burn-in steps are applied, remove them
+    # Remove burn-in steps if specified
     if burn_in_steps > 0:
         all_magnetizations = all_magnetizations[:, burn_in_steps:]
+        all_zealot_spins = all_zealot_spins[:, burn_in_steps:]
     
-    # Calculate last 10% of the run
-    last_10_percent_index = int(all_magnetizations.shape[1] * 0.9)
+    # Calculate last 10% index
+    last_10_percent_index = int(all_magnetizations.shape[1] * time_average_proportion)
     
-    # Calculate time-averaged magnetization for the last 10%
-    time_averaged_magnetizations = np.mean(all_magnetizations[:, last_10_percent_index:], axis=1)
+    # Calculate time-averaged values for the last 10%
+    time_avg_magnetizations = np.mean(all_magnetizations[:, last_10_percent_index:], axis=1)
+    time_avg_spins = np.mean(all_zealot_spins[:, last_10_percent_index:], axis=1)
     
-    # Identify indices of runs ending with positive or negative time-averaged magnetization
-    positive_indices = time_averaged_magnetizations > 0
-    negative_indices = time_averaged_magnetizations < 0
+    # Identify indices for positive and negative results
+    mag_positive_indices = time_avg_magnetizations > 0
+    mag_negative_indices = time_avg_magnetizations < 0
+    spin_positive_indices = time_avg_spins > 0
+    spin_negative_indices = time_avg_spins < 0
     
-    # Divide the magnetization time series into two groups
-    m_plus = all_magnetizations[positive_indices]
-    m_minus = all_magnetizations[negative_indices]
+    # Separate magnetization data
+    m_plus = all_magnetizations[mag_positive_indices]
+    m_minus = all_magnetizations[mag_negative_indices]
     
-    # Compute averages
-    average_magnetization_across_runs = np.mean(all_magnetizations)
-    m_plus_avg = np.mean(m_plus) if m_plus.size > 0 else 0
-    m_minus_avg = np.mean(m_minus) if m_minus.size > 0 else 0
+    # Separate zealot spin data
+    z_plus = all_zealot_spins[spin_positive_indices]
+    z_minus = all_zealot_spins[spin_negative_indices]
     
-    # Compute fractions
+    # Calculate total runs
     total_runs = all_magnetizations.shape[0]
-    g_plus = np.count_nonzero(positive_indices) / total_runs
-    g_minus = np.count_nonzero(negative_indices) / total_runs
     
-    return average_magnetization_across_runs, m_plus_avg, m_minus_avg, g_plus, g_minus
-      
-
-    return average_magnetization_across_runs_p, m_plus_avg_p, m_minus_avg_p, g_plus, g_minus
-
-def plot_average_magnetization(average_magnetization):
-    """
-    Plots the average magnetization across multiple simulation runs over time.
-
-    Parameters:
-    - average_magnetization: A list or 1D NumPy array of average magnetization over time.
-    """
-    # Create a plot
-    plt.figure(figsize=(10, 5))
-
-    # Plot the average magnetization
-    plt.plot(average_magnetization, label="Average Magnetization (across runs)")
-
-    # Labeling the plot
-    plt.xlabel("Monte Carlo Step")
-    plt.ylabel("Average Magnetization")
-    plt.title("Average Magnetization over Time (Averaged over Multiple Runs)")
-    plt.legend()
-    plt.grid(True)
-
-    # Show the plot
-    plt.show()
-
-def plot_magnetization_over_time(all_magnetizations):
-    """
-    Plots magnetization over time for multiple simulation runs.
-
-    Parameters:
-    - all_magnetizations: List of lists or 2D array where each element is a magnetization time series.
-    """
-    # Convert all_magnetizations into a NumPy array for easier handling (if not already)
-    all_magnetizations = np.array(all_magnetizations)
-
-    # Create a plot
-    plt.figure(figsize=(10, 6))
-
-    # Loop through each magnetization time series in all_magnetizations
-    for i, magnetization in enumerate(all_magnetizations):
-        plt.plot(magnetization, label=f"seed {i}")
-
-    # Labeling the plot
-    plt.xlabel("Monte Carlo Steps")
-    plt.ylabel("Magnetization")
-    plt.title("Magnetization Over Time for Multiple Runs")
-    plt.legend(loc="upper right", fontsize=8)
-    plt.grid(True)
-    plt.tight_layout()
-
-    # Show the plot
-    plt.show()
-
-def process_simulation_results_to_lists(simulation_results, burn_in=0):
-
-    # Initialize lists for each category
-    temperatures = []
-    average_magnetizations = []
-    m_plus_avgs = []
-    m_minus_avgs = []
-    g_plus_list = []
-    g_minus_list = []
-
-    # Process each temperature
-    for temp, all_magnetizations in simulation_results.items():
-        # Post-process the magnetization data for this temperature
-        average_magnetization, m_plus_avg, m_minus_avg, g_plus, g_minus= post_process_results(
-            all_magnetizations, burn_in=burn_in
-        )
-
-        # Append results to respective lists
-        temperatures.append(temp)
-        average_magnetizations.append(average_magnetization)
-        m_plus_avgs.append(m_plus_avg)
-        m_minus_avgs.append(m_minus_avg)
-        g_plus_list.append(g_plus)
-        g_minus_list.append(g_minus)
-
-    # Compile the results into a dictionary
+    # Compile all results into a dictionary
     results = {
-        'temperatures': temperatures,
-        'average_magnetizations': average_magnetizations,
-        'm_plus_avgs': m_plus_avgs,
-        'm_minus_avgs': m_minus_avgs,
-        'g_plus_list': g_plus_list,
-        'g_minus_list': g_minus_list,
+        # Magnetization results
+        'average_magnetization': np.mean(all_magnetizations),
+        'm_plus_avg': np.mean(m_plus) if m_plus.size > 0 else 0,
+        'm_minus_avg': np.mean(m_minus) if m_minus.size > 0 else 0,
+        'g_plus': np.count_nonzero(mag_positive_indices) / total_runs,
+        'g_minus': np.count_nonzero(mag_negative_indices) / total_runs,
+        
+        # Zealot spin results
+        'average_zealot_spin': np.mean(all_zealot_spins),
+        'z_plus_avg': np.mean(z_plus) if z_plus.size > 0 else 0,
+        'z_minus_avg': np.mean(z_minus) if z_minus.size > 0 else 0,
+        'f_plus': np.count_nonzero(spin_positive_indices) / total_runs,
+        'f_minus': np.count_nonzero(spin_negative_indices) / total_runs
     }
-
+    
     return results
 
-def plot_average_magnetizations_vs_temperature(results):
+def process_all_results(simulation_results, burn_in_steps, time_average_proportion):
     """
-    Plots the average magnetizations against temperatures.
+    Process results for all temperatures using the combined post-processing function.
+    """
+    temperatures = []
+    results_dict = {
+        'average_magnetizations': [], 'm_plus_avgs': [], 'm_minus_avgs': [], 
+        'g_plus_list': [], 'g_minus_list': [],
+        'average_zealot_spins': [], 'z_plus_avgs': [], 'z_minus_avgs': [],
+        'f_plus_list': [], 'f_minus_list': []
+    }
+    
+    for temp, data in simulation_results.items():
+        # Process both magnetization and zealot data using combined function
+        processed = post_process_combined_results(
+            data['magnetizations'], 
+            data['zealot_spins'], 
+            burn_in_steps,
+            time_average_proportion
+        )
+        
+        temperatures.append(temp)
+        
+        # Store all processed results
+        results_dict['average_magnetizations'].append(processed['average_magnetization'])
+        results_dict['m_plus_avgs'].append(processed['m_plus_avg'])
+        results_dict['m_minus_avgs'].append(processed['m_minus_avg'])
+        results_dict['g_plus_list'].append(processed['g_plus'])
+        results_dict['g_minus_list'].append(processed['g_minus'])
+        results_dict['average_zealot_spins'].append(processed['average_zealot_spin'])
+        results_dict['z_plus_avgs'].append(processed['z_plus_avg'])
+        results_dict['z_minus_avgs'].append(processed['z_minus_avg'])
+        results_dict['f_plus_list'].append(processed['f_plus'])
+        results_dict['f_minus_list'].append(processed['f_minus'])
+    
+    results_dict['temperatures'] = temperatures
+    return results_dict
 
-    Parameters:
-    - results: Dictionary containing processed results, including:
-        - 'temperatures': List of temperatures.
-        - 'average_magnetizations': List of average magnetizations corresponding to each temperature.
-    """
+def plot_magnetization_over_time(simulation_results):
+    
+    for temp, data in simulation_results.items():       
+        all_magnetizations = data['magnetizations']
+        plt.figure(figsize=(10, 6))
+        for i, magnetization in enumerate(all_magnetizations):
+            plt.plot(magnetization, label=f"Seed {i}")
+        
+        plt.xlabel("Monte Carlo Steps")
+        plt.ylabel("Magnetization")
+        plt.title(f"Magnetization Over Time (T = {temp})")
+        plt.grid(True)
+        plt.legend(loc='best', fontsize=8)
+        plt.tight_layout()
+        plt.show()
+
+def plot_average_magnetizations_vs_temperature(results):
     # Extract temperatures and average magnetizations
     temperatures = results['temperatures']
     average_magnetizations = results['average_magnetizations']
-
-    # Create a plot
+    standard_errors = results['average_magnetizations_std_errors']
+    
     plt.figure(figsize=(8, 5))
-    plt.plot(temperatures, average_magnetizations, marker="o", label="Average Magnetization", color="blue")
-
-    # Add labels, title, and grid
-    plt.xlabel("Temperature")
-    plt.ylabel("Average Magnetization")
-    plt.title("Average Magnetization vs. Temperature")
+    plt.errorbar(temperatures, average_magnetizations, 
+                 yerr=standard_errors,
+                 marker="o", label="Average Magnetization", color="blue", 
+                 capsize=5, ecolor='gray')
+    
+    plt.xlabel("Temperature", fontsize=12)
+    plt.ylabel("Average Magnetization", fontsize=12)
+    plt.title("Average Magnetization vs. Temperature", fontsize=14)
     plt.grid(True)
     plt.legend()
-
-    # Show the plot
     plt.tight_layout()
     plt.show()
-
+        
 def plot_g_plus_minus_vs_temperature(results):
-    """
-    Plots g_plus_list and g_minus_list against temperatures on the same graph.
-
-    Parameters:
-    - results: Dictionary containing processed results, including:
-        - 'temperatures': List of temperatures.
-        - 'g_plus_list': List of fractions of runs ending in positive magnetization.
-        - 'g_minus_list': List of fractions of runs ending in negative magnetization.
-    """
     # Extract data
     temperatures = results['temperatures']
     g_plus_list = results['g_plus_list']
     g_minus_list = results['g_minus_list']
+    g_plus_errors = results['g_plus_std_errors']
+    g_minus_errors = results['g_minus_std_errors']
 
     # Create a plot
     plt.figure(figsize=(8, 5))
-    plt.plot(temperatures, g_plus_list, marker="o", label="$g_+$ (Fraction Positive)", color="green")
-    plt.plot(temperatures, g_minus_list, marker="s", label="$g_-$ (Fraction Negative)", color="red")
+    plt.errorbar(temperatures, g_plus_list, yerr=g_plus_errors, 
+                 marker="o", label="$g_+$ (Fraction Positive)", color="green", 
+                 capsize=5, ecolor='gray')
+    plt.errorbar(temperatures, g_minus_list, yerr=g_minus_errors, 
+                 marker="s", label="$g_-$ (Fraction Negative)", color="red", 
+                 capsize=5, ecolor='gray')
 
     # Add labels, title, and grid
     plt.xlabel("Temperature")
@@ -351,29 +328,25 @@ def plot_g_plus_minus_vs_temperature(results):
     plt.show()
 
 def plot_m_plus_minus_vs_temperature(results):
-    """
-    Plots m_plus_avgs and m_minus_avgs against temperatures on the same graph.
-
-    Parameters:
-    - results: Dictionary containing processed results, including:
-        - 'temperatures': List of temperatures.
-        - 'm_plus_avgs': List of average magnetizations for runs ending in positive magnetization.
-        - 'm_minus_avgs': List of average magnetizations for runs ending in negative magnetization.
-    """
     # Extract data
     temperatures = results['temperatures']
     m_plus_avgs = results['m_plus_avgs']
     m_minus_avgs = results['m_minus_avgs']
-
+    m_plus_errors = results['m_plus_avgs_std_errors']
+    m_minus_errors = results['m_minus_avgs_std_errors']
+    
     # Create a plot
     plt.figure(figsize=(8, 5))
-    plt.plot(temperatures, m_plus_avgs, marker="o", label="$m_+$ (Average Positive Magnetization)", color="blue")
-    plt.plot(temperatures, m_minus_avgs, marker="s", label="$m_-$ (Average Negative Magnetization)", color="orange")
-
+    plt.errorbar(temperatures, m_plus_avgs, yerr=m_plus_errors, 
+                 marker="o", label="$m_+$ (Fraction Positive)", color="blue", 
+                 capsize=5, ecolor='gray')
+    plt.errorbar(temperatures, m_minus_avgs, yerr=m_minus_errors, 
+                 marker="s", label="$m_-$ (Fraction Negative)", color="orange", 
+                 capsize=5, ecolor='gray')
+    
     # Add labels, title, and grid
-    plt.xlabel("Temperature")
-    plt.ylabel("Average Magnetization")
-    plt.title("$m_+$ and $m_-$ vs. Temperature")
+    plt.xlabel("Temperature", fontsize=14)
+    plt.ylabel("Average Magnetization", fontsize=14)
     plt.grid(True)
     plt.legend()
 
@@ -381,21 +354,88 @@ def plot_m_plus_minus_vs_temperature(results):
     plt.tight_layout()
     plt.show()
 
+def plot_zealot_statistics_vs_temperature(results):
+
+    temperatures = results['temperatures']
+    average_zealot_spins = results['average_zealot_spins']
+    zealot_errors = results['average_zealot_spins_std_errors']
+    
+    # Plot average zealot spin vs temperature
+    plt.figure(figsize=(8, 5))
+    plt.errorbar(temperatures, average_zealot_spins, 
+                 yerr=zealot_errors,
+                 marker="o", label="Average Zealot Spin", color="purple", 
+                 capsize=5, ecolor='gray')
+
+    plt.xlabel("Temperature", fontsize=12)
+    plt.ylabel("Average Zealot Spin", fontsize=12)
+    plt.title("Average Zealot Spin vs. Temperature", fontsize=14)
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+    z_plus_avgs = results['z_plus_avgs']
+    z_minus_avgs = results['z_minus_avgs']
+    z_plus_errors = results['z_plus_avgs_std_errors']
+    z_minus_errors = results['z_minus_avgs_std_errors']
+    
+    # Plot z+ and z- vs temperature
+    plt.figure(figsize=(8, 5))
+    plt.errorbar(temperatures, z_plus_avgs, yerr=z_plus_errors, 
+                 marker="o", label="$m_+$ (Fraction Positive)", color="blue", 
+                 capsize=5, ecolor='gray')
+    plt.errorbar(temperatures, z_minus_avgs, yerr=z_minus_errors, 
+                 marker="s", label="$m_-$ (Fraction Negative)", color="red", 
+                 capsize=5, ecolor='gray')
+
+    plt.xlabel("Temperature", fontsize=12)
+    plt.ylabel("Average Zealot Spin", fontsize=12)
+    plt.title("$z_+$ and $z_-$ vs. Temperature", fontsize=14)
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+    f_plus_list = results['f_plus_list']
+    f_minus_list = results['f_minus_list']
+    f_plus_errors = results['f_plus_std_errors']
+    f_minus_errors = results['f_minus_std_errors']
+
+    # Plot f+ and f- vs temperature
+    plt.figure(figsize=(8, 5))
+    plt.errorbar(temperatures, f_plus_list, yerr=f_plus_errors, 
+                 marker="o", label="$f_+$ (Fraction Positive)", color="green", 
+                 capsize=5, ecolor='gray')
+    plt.errorbar(temperatures, f_minus_list, yerr=f_minus_errors, 
+                 marker="s", label="$f_-$ (Fraction Negative)", color="orange", 
+                 capsize=5, ecolor='gray')
+
+    plt.xlabel("Temperature", fontsize=12)
+    plt.ylabel("Fraction of Runs", fontsize=12)
+    plt.title("$f_+$ and $f_-$ vs. Temperature", fontsize=14)
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()  
+  
 
 # Parameters
 L = 50  # Size of the lattice (LxL)
 N=L**2
 zealot_spin = 1
 k_B = 1     #.380649e-23  # Boltzmann constant
-num_iterations = N*1000  # Total number of iterations
+num_iterations = N*200  # Total number of iterations
 J_b = 1#1/4  # Coupling constant
 J_s = 0#1.01
 h_b= 0#-1
 h_s = 0#N
-seeds = list(np.linspace(1,8,8, dtype = int))
+seeds = list(np.linspace(1,5,5, dtype = int))
 number_of_MC_steps = 2
-temperatures = list(np.linspace(0.1,1.5,8))
+temperatures = list(np.linspace(0.1,1.5,5))
 burn_in_steps = int((num_iterations/(number_of_MC_steps*N))*0.5)
+time_average_proportion = 0.8
+
 seeds
 temperatures
 start = time.time()
@@ -408,13 +448,12 @@ print("It took", length, "seconds!")
 
 
 
-all_magnetizations_p = simulation_results[1.3]
-plot_magnetization_over_time(all_magnetizations_p)
-
-processed_results_lists = process_simulation_results_to_lists(simulation_results, burn_in=burn_in_steps)
+plot_magnetization_over_time(simulation_results)
+processed_results_lists = process_all_results(simulation_results, burn_in_steps, time_average_proportion)
 plot_average_magnetizations_vs_temperature(processed_results_lists)
 plot_m_plus_minus_vs_temperature(processed_results_lists)
 plot_g_plus_minus_vs_temperature(processed_results_lists)
-
+plot_zealot_statistics_vs_temperature(processed_results_lists)
+  
 
 
