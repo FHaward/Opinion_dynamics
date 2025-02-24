@@ -1,6 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from tqdm import tqdm
 from joblib import Parallel, delayed
 import itertools
 import time
@@ -64,10 +63,12 @@ def metropolis_step(lattice, L, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, magn
 
     return magnetization
     
-def run_individual_simulation(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps):
+def run_individual_simulation(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, initial_up_ratio=0.5):
     np.random.seed(seed)
     zealot_spin = np.random.choice([-1, 1])
-    lattice = np.random.choice([-1, 1], size=(L, L))
+    p_up = initial_up_ratio
+    p_down = 1 - initial_up_ratio
+    lattice = np.random.choice([-1, 1], size=(L, L), p=[p_down, p_up])
     magnetization_record_interval = number_of_MC_steps * N
     magnetization = np.sum(lattice)  # Initial magnetization
 
@@ -81,7 +82,7 @@ def run_individual_simulation(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_
     recalculation_index = 1
 
     # Loop over each interval
-    for interval in tqdm(range(num_intervals), desc=f"Temp {temp}, Seed {seed}"):
+    for interval in range(num_intervals):
         for step in range(number_of_MC_steps):
             for _ in range(N): 
                 magnetization = metropolis_step(lattice, L, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, magnetization)
@@ -122,7 +123,7 @@ def run_individual_simulation(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_
                    
     return temp, all_magnetizations, zealot_array
 
-def run_parallel_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps):
+def run_parallel_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, initial_up_ratio=0.5):
     """
     Run simulations for all temperature-seed combinations in parallel.
     """
@@ -131,8 +132,9 @@ def run_parallel_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s,
     # Run all combinations in parallel
     results = Parallel(n_jobs=-1, backend="loky")(
         delayed(run_individual_simulation)(
-            seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps
-        ) for temp, seed in tqdm(combinations, desc="Running simulations")
+            seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, 
+            num_iterations, number_of_MC_steps, initial_up_ratio
+        ) for temp, seed in combinations
     )
     
     # Organize results by temperature
@@ -144,9 +146,8 @@ def run_parallel_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s,
         results_dict[temp]['zealot_spins'].append(zealot_spins)
     
     return results_dict 
-  
-def post_process_combined_results(all_magnetizations, all_zealot_spins, burn_in_steps, time_average_proportion):
 
+def post_process_combined_results(all_magnetizations, all_zealot_spins, burn_in_steps, time_average_proportion):
     # Convert inputs to numpy arrays if they aren't already
     all_magnetizations = np.array(all_magnetizations)
     all_zealot_spins = np.array(all_zealot_spins)
@@ -180,21 +181,83 @@ def post_process_combined_results(all_magnetizations, all_zealot_spins, burn_in_
     # Calculate total runs
     total_runs = all_magnetizations.shape[0]
     
+    # Calculate g_plus, g_minus and f_plus, f_minus
+    g_plus = np.count_nonzero(mag_positive_indices) / total_runs
+    g_minus = np.count_nonzero(mag_negative_indices) / total_runs
+    f_plus = np.count_nonzero(spin_positive_indices) / total_runs
+    f_minus = np.count_nonzero(spin_negative_indices) / total_runs
+    
+    # Calculate averages
+    m_plus_avg = np.mean(m_plus) if m_plus.size > 0 else 0
+    m_minus_avg = np.mean(m_minus) if m_minus.size > 0 else 0
+    z_plus_avg = np.mean(z_plus) if z_plus.size > 0 else 0
+    z_minus_avg = np.mean(z_minus) if z_minus.size > 0 else 0
+    
+    # Calculate standard errors
+    m_plus_std_error = np.std(time_avg_magnetizations[mag_positive_indices]) / np.sqrt(np.sum(mag_positive_indices)) if np.sum(mag_positive_indices) > 0 else 0
+    m_minus_std_error = np.std(time_avg_magnetizations[mag_negative_indices]) / np.sqrt(np.sum(mag_negative_indices)) if np.sum(mag_negative_indices) > 0 else 0
+    z_plus_std_error = np.std(time_avg_spins[spin_positive_indices]) / np.sqrt(np.sum(spin_positive_indices)) if np.sum(spin_positive_indices) > 0 else 0
+    z_minus_std_error = np.std(time_avg_spins[spin_negative_indices]) / np.sqrt(np.sum(spin_negative_indices)) if np.sum(spin_negative_indices) > 0 else 0
+    
+    g_plus_std_error = np.sqrt((g_plus * (1 - g_plus)) / total_runs)
+    g_minus_std_error = np.sqrt((g_minus * (1 - g_minus)) / total_runs)
+    f_plus_std_error = np.sqrt((f_plus * (1 - f_plus)) / total_runs)
+    f_minus_std_error = np.sqrt((f_minus * (1 - f_minus)) / total_runs)
+    
+    # Calculate weighted averages
+    average_magnetization = m_plus_avg * g_plus + m_minus_avg * g_minus
+    average_zealot_spin = z_plus_avg * f_plus + z_minus_avg * f_minus
+    
+    # Calculate errors of weighted averages using error propagation
+    # For a function f(x,y,z,w) = ax + by, the error is:
+    # σf² = (∂f/∂x)²σx² + (∂f/∂y)²σy² + (∂f/∂z)²σz² + (∂f/∂w)²σw²
+    average_magnetization_std_error = np.sqrt(
+        (g_plus * m_plus_std_error)**2 +      # (∂M/∂m₊ σm₊)² = (g₊ σm₊)²
+        (g_minus * m_minus_std_error)**2 +    # (∂M/∂m₋ σm₋)² = (g₋ σm₋)²
+        (m_plus_avg * g_plus_std_error)**2 +  # (∂M/∂g₊ σg₊)² = (m₊ σg₊)²
+        (m_minus_avg * g_minus_std_error)**2  # (∂M/∂g₋ σg₋)² = (m₋ σg₋)²
+    )
+    
+    average_zealot_spin_std_error = np.sqrt(
+        (f_plus * z_plus_std_error)**2 +      # (∂Z/∂z₊ σz₊)² = (f₊ σz₊)²
+        (f_minus * z_minus_std_error)**2 +    # (∂Z/∂z₋ σz₋)² = (f₋ σz₋)²
+        (z_plus_avg * f_plus_std_error)**2 +  # (∂Z/∂f₊ σf₊)² = (z₊ σf₊)²
+        (z_minus_avg * f_minus_std_error)**2  # (∂Z/∂f₋ σf₋)² = (z₋ σf₋)²
+    )
+    
     # Compile all results into a dictionary
     results = {
         # Magnetization results
-        'average_magnetization': np.mean(all_magnetizations),
-        'm_plus_avg': np.mean(m_plus) if m_plus.size > 0 else 0,
-        'm_minus_avg': np.mean(m_minus) if m_minus.size > 0 else 0,
-        'g_plus': np.count_nonzero(mag_positive_indices) / total_runs,
-        'g_minus': np.count_nonzero(mag_negative_indices) / total_runs,
+        'average_magnetization': average_magnetization,
+        'average_magnetization_std_error': average_magnetization_std_error,
+        
+        'm_plus_avg': m_plus_avg,
+        'm_plus_avg_std_error': m_plus_std_error,
+        
+        'm_minus_avg': m_minus_avg,
+        'm_minus_avg_std_error': m_minus_std_error,
+        
+        'g_plus': g_plus,
+        'g_plus_std_error': g_plus_std_error,
+        
+        'g_minus': g_minus,
+        'g_minus_std_error': g_minus_std_error,
         
         # Zealot spin results
-        'average_zealot_spin': np.mean(all_zealot_spins),
-        'z_plus_avg': np.mean(z_plus) if z_plus.size > 0 else 0,
-        'z_minus_avg': np.mean(z_minus) if z_minus.size > 0 else 0,
-        'f_plus': np.count_nonzero(spin_positive_indices) / total_runs,
-        'f_minus': np.count_nonzero(spin_negative_indices) / total_runs
+        'average_zealot_spin': average_zealot_spin,
+        'average_zealot_spin_std_error': average_zealot_spin_std_error,
+        
+        'z_plus_avg': z_plus_avg,
+        'z_plus_avg_std_error': z_plus_std_error,
+        
+        'z_minus_avg': z_minus_avg,
+        'z_minus_avg_std_error': z_minus_std_error,
+        
+        'f_plus': f_plus,
+        'f_plus_std_error': f_plus_std_error,
+        
+        'f_minus': f_minus,
+        'f_minus_std_error': f_minus_std_error
     }
     
     return results
@@ -208,7 +271,13 @@ def process_all_results(simulation_results, burn_in_steps, time_average_proporti
         'average_magnetizations': [], 'm_plus_avgs': [], 'm_minus_avgs': [], 
         'g_plus_list': [], 'g_minus_list': [],
         'average_zealot_spins': [], 'z_plus_avgs': [], 'z_minus_avgs': [],
-        'f_plus_list': [], 'f_minus_list': []
+        'f_plus_list': [], 'f_minus_list': [],
+        
+        # Add corresponding standard error lists
+        'average_magnetizations_std_errors': [], 'm_plus_avgs_std_errors': [], 'm_minus_avgs_std_errors': [],
+        'g_plus_std_errors': [], 'g_minus_std_errors': [],
+        'average_zealot_spins_std_errors': [], 'z_plus_avgs_std_errors': [], 'z_minus_avgs_std_errors': [],
+        'f_plus_std_errors': [], 'f_minus_std_errors': []
     }
     
     for temp, data in simulation_results.items():
@@ -224,15 +293,34 @@ def process_all_results(simulation_results, burn_in_steps, time_average_proporti
         
         # Store all processed results
         results_dict['average_magnetizations'].append(processed['average_magnetization'])
+        results_dict['average_magnetizations_std_errors'].append(processed['average_magnetization_std_error'])
+        
         results_dict['m_plus_avgs'].append(processed['m_plus_avg'])
+        results_dict['m_plus_avgs_std_errors'].append(processed['m_plus_avg_std_error'])
+        
         results_dict['m_minus_avgs'].append(processed['m_minus_avg'])
+        results_dict['m_minus_avgs_std_errors'].append(processed['m_minus_avg_std_error'])
+        
         results_dict['g_plus_list'].append(processed['g_plus'])
+        results_dict['g_plus_std_errors'].append(processed['g_plus_std_error'])
+        
         results_dict['g_minus_list'].append(processed['g_minus'])
+        results_dict['g_minus_std_errors'].append(processed['g_minus_std_error'])
+        
         results_dict['average_zealot_spins'].append(processed['average_zealot_spin'])
+        results_dict['average_zealot_spins_std_errors'].append(processed['average_zealot_spin_std_error'])
+        
         results_dict['z_plus_avgs'].append(processed['z_plus_avg'])
+        results_dict['z_plus_avgs_std_errors'].append(processed['z_plus_avg_std_error'])
+        
         results_dict['z_minus_avgs'].append(processed['z_minus_avg'])
+        results_dict['z_minus_avgs_std_errors'].append(processed['z_minus_avg_std_error'])
+        
         results_dict['f_plus_list'].append(processed['f_plus'])
+        results_dict['f_plus_std_errors'].append(processed['f_plus_std_error'])
+        
         results_dict['f_minus_list'].append(processed['f_minus'])
+        results_dict['f_minus_std_errors'].append(processed['f_minus_std_error'])
     
     results_dict['temperatures'] = temperatures
     return results_dict
@@ -253,7 +341,6 @@ def plot_magnetization_over_time(simulation_results, save_path):
         plt.ylabel("Magnetization")
         plt.title(f"Magnetization Over Time (T = {temp})")
         plt.grid(True)
-        plt.legend(loc='best', fontsize=8)
         plt.tight_layout()
         save_plot(plt, os.path.join(save_path, f"magnetization_over_time_T={temp}.png"))
 
@@ -397,7 +484,7 @@ def plot_zealot_statistics_vs_temperature(results, save_path):
     plt.tight_layout()
     save_plot(plt, os.path.join(save_path, "f_plus_minus_vs_temp.png"))
   
-def save_results(simulation_type="fully_connected", results_dir="./simulation_results"):
+def save_results(simulation_type="fully_connected", initial_up_ratio=0.5, results_dir="./simulation_results"):
     """
     Save simulation results to a directory.
     simulation_type: either "fully_connected" or "nearest_neighbour"
@@ -409,12 +496,16 @@ def save_results(simulation_type="fully_connected", results_dir="./simulation_re
     
     # Create simulation type directory if it doesn't exist
     sim_type_dir = os.path.join(results_dir, simulation_type)
-    if not os.path.exists(sim_type_dir):
-        os.makedirs(sim_type_dir)
+
+    ratio_str = f"ratio_{round(initial_up_ratio * 100)}_to_{round((1-initial_up_ratio) * 100)}"
+    ratio_dir = os.path.join(sim_type_dir, ratio_str)
     
+    zealot_field_str = f"zealot_field_{h_s}"
+    field_dir = os.path.join(ratio_dir, zealot_field_str)
+        
     # Create timestamped subdirectory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_dir = os.path.join(sim_type_dir, timestamp)
+    run_dir = os.path.join(field_dir, timestamp)
     os.makedirs(run_dir)
     
     # Save parameters
@@ -432,7 +523,9 @@ def save_results(simulation_type="fully_connected", results_dir="./simulation_re
         "seeds": seeds,
         "temperatures": temperatures,
         "burn_in_steps": burn_in_steps,
-        "simulation_type": simulation_type
+        "simulation_type": simulation_type,
+        "initial_ratio": initial_up_ratio
+
     }
     
     with open(os.path.join(run_dir, "parameters.txt"), "w") as f:
@@ -453,16 +546,16 @@ J_s = 1.01
 h_b= -1
 h_s = N
 number_of_MC_steps = 2
-seeds = np.linspace(1,30,30).astype(int).tolist()
-temperatures = np.linspace(0.1,1.5,30).tolist()
+seeds = np.linspace(1,20,20).astype(int).tolist()
+temperatures = np.linspace(0.1,1.5,20).tolist()
 burn_in_steps = int((num_iterations/(number_of_MC_steps*N))*0.5)
-results_path = save_results(simulation_type="fully_connected")
 time_average_proportion = 0.8
-
+initial_up_ratio =0.5
+results_path = save_results(simulation_type="fully_connected", initial_up_ratio=initial_up_ratio)
 
 # Run the simulation for all temperatures in parallel
 start = time.time()
-simulation_results = run_parallel_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps)
+simulation_results = run_parallel_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, initial_up_ratio)
 end = time.time()
 length = end - start
 processed_results_lists = process_all_results(simulation_results, burn_in_steps, time_average_proportion)
@@ -487,5 +580,5 @@ with open(os.path.join(results_path, "numerical_results.json"), "w") as f:
 
 
 
-n_cores = int(os.environ.get('SLURM_CPUS_PER_TASK', default=1))
-print(f"this simulation used {n_cores} cores and took {length} seconds")
+#n_cores = int(os.environ.get('SLURM_CPUS_PER_TASK', default=1))
+#print(f"this simulation used {n_cores} cores and took {length} seconds")

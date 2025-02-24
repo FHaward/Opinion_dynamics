@@ -97,18 +97,18 @@ def run_simulation_with_snapshots(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zea
 
 
 # Parameters
-L = 50
+L = 100
 N = L**2
-zealot_spin = 1
+zealot_spin = -1
 k_B = 1
-num_iterations = N*50  # Total number of iterations
+num_iterations = N*100  # Total number of iterations
 J_b = 1.0/(N-1)
-J_s = 1
+J_s = 1.01
 h_b = -1
 h_s = N
 number_of_MC_steps = 2
-seed = 11
-temp = 0.8
+seed = 7
+temp = 0.1
 
 # Run the simulation
 magnetization, lattice_snapshots = run_simulation_with_snapshots(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps)

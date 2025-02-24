@@ -62,10 +62,12 @@ def metropolis_step(lattice, L, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, magn
 
     return magnetization
     
-def run_individual_simulation(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps):
+def run_individual_simulation(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, initial_up_ratio=0.5):
     np.random.seed(seed)
     zealot_spin = np.random.choice([-1, 1])
-    lattice = np.random.choice([-1, 1], size=(L, L))
+    p_up = initial_up_ratio
+    p_down = 1 - initial_up_ratio
+    lattice = np.random.choice([-1, 1], size=(L, L), p=[p_down, p_up])
     magnetization_record_interval = number_of_MC_steps * N
     magnetization = np.sum(lattice)  # Initial magnetization
 
@@ -120,7 +122,7 @@ def run_individual_simulation(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_
                    
     return temp, all_magnetizations, zealot_array
 
-def run_parallel_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps):
+def run_parallel_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, initial_up_ratio=0.5):
     """
     Run simulations for all temperature-seed combinations in parallel.
     """
@@ -129,7 +131,8 @@ def run_parallel_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s,
     # Run all combinations in parallel
     results = Parallel(n_jobs=-1, backend="loky")(
         delayed(run_individual_simulation)(
-            seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps
+            seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, 
+            num_iterations, number_of_MC_steps, initial_up_ratio
         ) for temp, seed in tqdm(combinations, desc="Running simulations")
     )
     
@@ -177,39 +180,83 @@ def post_process_combined_results(all_magnetizations, all_zealot_spins, burn_in_
     # Calculate total runs
     total_runs = all_magnetizations.shape[0]
     
+    # Calculate g_plus, g_minus and f_plus, f_minus
+    g_plus = np.count_nonzero(mag_positive_indices) / total_runs
+    g_minus = np.count_nonzero(mag_negative_indices) / total_runs
+    f_plus = np.count_nonzero(spin_positive_indices) / total_runs
+    f_minus = np.count_nonzero(spin_negative_indices) / total_runs
+    
+    # Calculate averages
+    m_plus_avg = np.mean(m_plus) if m_plus.size > 0 else 0
+    m_minus_avg = np.mean(m_minus) if m_minus.size > 0 else 0
+    z_plus_avg = np.mean(z_plus) if z_plus.size > 0 else 0
+    z_minus_avg = np.mean(z_minus) if z_minus.size > 0 else 0
+    
+    # Calculate standard errors
+    m_plus_std_error = np.std(time_avg_magnetizations[mag_positive_indices]) / np.sqrt(np.sum(mag_positive_indices)) if np.sum(mag_positive_indices) > 0 else 0
+    m_minus_std_error = np.std(time_avg_magnetizations[mag_negative_indices]) / np.sqrt(np.sum(mag_negative_indices)) if np.sum(mag_negative_indices) > 0 else 0
+    z_plus_std_error = np.std(time_avg_spins[spin_positive_indices]) / np.sqrt(np.sum(spin_positive_indices)) if np.sum(spin_positive_indices) > 0 else 0
+    z_minus_std_error = np.std(time_avg_spins[spin_negative_indices]) / np.sqrt(np.sum(spin_negative_indices)) if np.sum(spin_negative_indices) > 0 else 0
+    
+    g_plus_std_error = np.sqrt((g_plus * (1 - g_plus)) / total_runs)
+    g_minus_std_error = np.sqrt((g_minus * (1 - g_minus)) / total_runs)
+    f_plus_std_error = np.sqrt((f_plus * (1 - f_plus)) / total_runs)
+    f_minus_std_error = np.sqrt((f_minus * (1 - f_minus)) / total_runs)
+    
+    # Calculate weighted averages
+    average_magnetization = m_plus_avg * g_plus + m_minus_avg * g_minus
+    average_zealot_spin = z_plus_avg * f_plus + z_minus_avg * f_minus
+    
+    # Calculate errors of weighted averages using error propagation
+    # For a function f(x,y,z,w) = ax + by, the error is:
+    # σf² = (∂f/∂x)²σx² + (∂f/∂y)²σy² + (∂f/∂z)²σz² + (∂f/∂w)²σw²
+    average_magnetization_std_error = np.sqrt(
+        (g_plus * m_plus_std_error)**2 +      # (∂M/∂m₊ σm₊)² = (g₊ σm₊)²
+        (g_minus * m_minus_std_error)**2 +    # (∂M/∂m₋ σm₋)² = (g₋ σm₋)²
+        (m_plus_avg * g_plus_std_error)**2 +  # (∂M/∂g₊ σg₊)² = (m₊ σg₊)²
+        (m_minus_avg * g_minus_std_error)**2  # (∂M/∂g₋ σg₋)² = (m₋ σg₋)²
+    )
+    
+    average_zealot_spin_std_error = np.sqrt(
+        (f_plus * z_plus_std_error)**2 +      # (∂Z/∂z₊ σz₊)² = (f₊ σz₊)²
+        (f_minus * z_minus_std_error)**2 +    # (∂Z/∂z₋ σz₋)² = (f₋ σz₋)²
+        (z_plus_avg * f_plus_std_error)**2 +  # (∂Z/∂f₊ σf₊)² = (z₊ σf₊)²
+        (z_minus_avg * f_minus_std_error)**2  # (∂Z/∂f₋ σf₋)² = (z₋ σf₋)²
+    )
+    
     # Compile all results into a dictionary
     results = {
         # Magnetization results
-        'average_magnetization': np.mean(time_avg_magnetizations),
-        'average_magnetization_std_error': np.std(time_avg_magnetizations) / np.sqrt(len(time_avg_magnetizations)),
+        'average_magnetization': average_magnetization,
+        'average_magnetization_std_error': average_magnetization_std_error,
         
-        'm_plus_avg': np.mean(m_plus) if m_plus.size > 0 else 0,
-        'm_plus_avg_std_error': np.std(time_avg_magnetizations[mag_positive_indices]) / np.sqrt(np.sum(mag_positive_indices)) if np.sum(mag_positive_indices) > 0 else 0,
+        'm_plus_avg': m_plus_avg,
+        'm_plus_avg_std_error': m_plus_std_error,
         
-        'm_minus_avg': np.mean(m_minus) if m_minus.size > 0 else 0,
-        'm_minus_avg_std_error': np.std(time_avg_magnetizations[mag_negative_indices]) / np.sqrt(np.sum(mag_negative_indices)) if np.sum(mag_negative_indices) > 0 else 0,
+        'm_minus_avg': m_minus_avg,
+        'm_minus_avg_std_error': m_minus_std_error,
         
-        'g_plus': np.count_nonzero(mag_positive_indices) / total_runs,
-        'g_plus_std_error': np.sqrt((np.count_nonzero(mag_positive_indices) * (1 - np.count_nonzero(mag_positive_indices)/total_runs)) / total_runs),
+        'g_plus': g_plus,
+        'g_plus_std_error': g_plus_std_error,
         
-        'g_minus': np.count_nonzero(mag_negative_indices) / total_runs,
-        'g_minus_std_error': np.sqrt((np.count_nonzero(mag_negative_indices) * (1 - np.count_nonzero(mag_negative_indices)/total_runs)) / total_runs),
+        'g_minus': g_minus,
+        'g_minus_std_error': g_minus_std_error,
         
         # Zealot spin results
-        'average_zealot_spin': np.mean(time_avg_spins),
-        'average_zealot_spin_std_error': np.std(time_avg_spins) / np.sqrt(len(time_avg_spins)),
+        'average_zealot_spin': average_zealot_spin,
+        'average_zealot_spin_std_error': average_zealot_spin_std_error,
         
-        'z_plus_avg': np.mean(z_plus) if z_plus.size > 0 else 0,
-        'z_plus_avg_std_error': np.std(time_avg_spins[spin_positive_indices]) / np.sqrt(np.sum(spin_positive_indices)) if np.sum(spin_positive_indices) > 0 else 0,
+        'z_plus_avg': z_plus_avg,
+        'z_plus_avg_std_error': z_plus_std_error,
         
-        'z_minus_avg': np.mean(z_minus) if z_minus.size > 0 else 0,
-        'z_minus_avg_std_error': np.std(time_avg_spins[spin_negative_indices]) / np.sqrt(np.sum(spin_negative_indices)) if np.sum(spin_negative_indices) > 0 else 0,
+        'z_minus_avg': z_minus_avg,
+        'z_minus_avg_std_error': z_minus_std_error,
         
-        'f_plus': np.count_nonzero(spin_positive_indices) / total_runs,
-        'f_plus_std_error': np.sqrt((np.count_nonzero(spin_positive_indices) * (1 - np.count_nonzero(spin_positive_indices)/total_runs)) / total_runs),
+        'f_plus': f_plus,
+        'f_plus_std_error': f_plus_std_error,
         
-        'f_minus': np.count_nonzero(spin_negative_indices) / total_runs,
-        'f_minus_std_error': np.sqrt((np.count_nonzero(spin_negative_indices) * (1 - np.count_nonzero(spin_negative_indices)/total_runs)) / total_runs)
+        'f_minus': f_minus,
+        'f_minus_std_error': f_minus_std_error
     }
     
     return results
@@ -434,25 +481,26 @@ def plot_zealot_statistics_vs_temperature(results):
     plt.show()  
   
 # Parameters
-L = 50  # Size of the lattice (LxL)
+L = 100  # Size of the lattice (LxL)
 N=L**2
-zealot_spin = 1
+zealot_spin = -1
 k_B = 1     #.380649e-23  # Boltzmann constant
-num_iterations = N*100  # Total number of iterations
+num_iterations = N*10  # Total number of iterations
 J_b = 1/(N-1)  # Coupling constant
 J_s = 1.01
 h_b= -1
 h_s = N
 number_of_MC_steps = 2
-seeds = np.linspace(1,10,10).astype(int).tolist()
-temperatures = np.linspace(0.1,1.5,10).tolist()
-burn_in_steps = int((num_iterations/(number_of_MC_steps*N))*0.5)
+seeds = np.linspace(1,5,5).astype(int).tolist()
+temperatures = np.linspace(0.1,1.1,10).tolist()
+burn_in_steps = int((num_iterations/(number_of_MC_steps*N))*0.8)
 time_average_proportion = 0.8
+initial_up_ratio = 0.6
 
 temperatures
 # Run the simulation for all temperatures in parallel
 start = time.time()
-simulation_results = run_parallel_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps)
+simulation_results = run_parallel_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, initial_up_ratio)
 end = time.time()
 length = end - start
 print("It took", length, "seconds!")
@@ -466,4 +514,5 @@ plot_m_plus_minus_vs_temperature(processed_results_lists)
 plot_g_plus_minus_vs_temperature(processed_results_lists)
 plot_zealot_statistics_vs_temperature(processed_results_lists)
   
+
 
