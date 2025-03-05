@@ -144,9 +144,9 @@ def plot_combined_g_plus_minus(results_list, labels, save_path=None):
         plt.errorbar(temps, g_plus, yerr=g_plus_err, 
                     marker="o", label=f"{label} ($g_+$)", color=color1,
                     capsize=5, markersize=4)
-        plt.errorbar(temps, g_minus, yerr=g_minus_err, 
+        '''plt.errorbar(temps, g_minus, yerr=g_minus_err, 
                     marker="s", label=f"{label} ($g_-$)", color=color2,
-                    capsize=5, markersize=4)
+                    capsize=5, markersize=4)'''
     
     plt.xlabel("Temperature", fontsize=12)
     plt.ylabel("Fraction of Runs", fontsize=12)
@@ -259,9 +259,9 @@ def plot_combined_f_plus_minus(results_list, labels, save_path=None):
         plt.errorbar(temps, f_plus, yerr=f_plus_err, 
                     marker="o", label=f"{label} ($f_+$)", color=color1,
                     capsize=5, markersize=4)
-        plt.errorbar(temps, f_minus, yerr=f_minus_err, 
+        '''plt.errorbar(temps, f_minus, yerr=f_minus_err, 
                     marker="s", label=f"{label} ($f_-$)", color=color2,
-                    capsize=5, markersize=4)
+                    capsize=5, markersize=4)'''
     
     plt.xlabel("Temperature", fontsize=12)
     plt.ylabel("Fraction of Runs", fontsize=12)
@@ -315,12 +315,6 @@ path_40_60 = r"C:\Users\frase\Documents\Durham\4th Year\1Project\Initial results
 path_50_50 = r"C:\Users\frase\Documents\Durham\4th Year\1Project\Initial results\simulation_results\fully_connected\ratio_50_to_50\zealot_field_10000\20250218_012653\numerical_results.json"
 path_60_40 = r"C:\Users\frase\Documents\Durham\4th Year\1Project\Initial results\simulation_results\fully_connected\ratio_60_to_40\zealot_field_10000\20250217_201038\numerical_results.json"
 
-
-path_benchmark = r"C:\Users\frase\Documents\Durham\4th Year\1Project\thousand_seed_runs\simulation_results\fully_connected\ratio_50_to_50\zealot_field_10000\20250219_224558\numerical_results.json"
-path_low_zealot = r"C:\Users\frase\Documents\Durham\4th Year\1Project\thousand_seed_runs\simulation_results\fully_connected\ratio_50_to_50\zealot_field_9000.0\20250224_110453\numerical_results.json"
-path_high_zealot = r"C:\Users\frase\Documents\Durham\4th Year\1Project\thousand_seed_runs\simulation_results\fully_connected\ratio_50_to_50\zealot_field_11000.0\20250224_110447\numerical_results.json"
-
-
 results1 = load_processed_results(path1)
 results2 = load_processed_results(path2)
 results3 = load_processed_results(path3)
@@ -329,14 +323,37 @@ results_50_50 = load_processed_results(path_50_50)
 results_60_40 = load_processed_results(path_60_40)
 
 
+
+path_benchmark = r"C:\Users\frase\Documents\Durham\4th Year\1Project\thousand_seed_runs\simulation_results\fully_connected\ratio_50_to_50\zealot_field_10000\20250219_224558\numerical_results.json"
+path_60_up = r"C:\Users\frase\Documents\Durham\4th Year\1Project\thousand_seed_runs\simulation_results\fully_connected\ratio_60_to_40\zealot_field_10000\20250224_182947\numerical_results.json"
+path_40_up = r"C:\Users\frase\Documents\Durham\4th Year\1Project\thousand_seed_runs\simulation_results\fully_connected\ratio_40_to_60\zealot_field_10000\20250224_183021\numerical_results.json"
+path_lower_z_field =r"C:\Users\frase\Documents\Durham\4th Year\1Project\thousand_seed_runs\simulation_results\fully_connected\ratio_50_to_50\zealot_field_8000.0\20250224_225357\numerical_results.json"
+path_low_z_field = r"C:\Users\frase\Documents\Durham\4th Year\1Project\thousand_seed_runs\simulation_results\fully_connected\ratio_50_to_50\zealot_field_9000.0\20250224_110453\numerical_results.json"
+path_high_z_field = r"C:\Users\frase\Documents\Durham\4th Year\1Project\thousand_seed_runs\simulation_results\fully_connected\ratio_50_to_50\zealot_field_11000.0\20250224_110447\numerical_results.json"
+path_low_interaction = r"C:\Users\frase\Documents\Durham\4th Year\1Project\thousand_seed_runs\simulation_results\fully_connected\ratio_50_to_50\zealot_field_10000\20250224_230658\numerical_results.json"
+path_high_interaction = r"C:\Users\frase\Documents\Durham\4th Year\1Project\thousand_seed_runs\simulation_results\fully_connected\ratio_50_to_50\zealot_field_10000\20250224_230647\numerical_results.json"
+path_negative_interaction = r"C:\Users\frase\Documents\Durham\4th Year\1Project\thousand_seed_runs\simulation_results\fully_connected\ratio_50_to_50\zealot_field_10000\20250225_090911\numerical_results.json"
+
 results_benchmark = load_processed_results(path_benchmark)
-results_low_zealot = load_processed_results(path_low_zealot)
-results_high_zealot = load_processed_results(path_high_zealot)
+results_60_up = load_processed_results(path_60_up)
+results_40_up = load_processed_results(path_40_up)
+results_lower_z_field = load_processed_results(path_lower_z_field)
+results_low_z_field = load_processed_results(path_low_z_field)
+results_high_z_field = load_processed_results(path_high_z_field)
+results_low_interaction = load_processed_results(path_low_interaction)
+results_high_interaction = load_processed_results(path_high_interaction)
+results_negative_interaction = load_processed_results(path_negative_interaction)
 
 
 # Create labels for each dataset
-labels1 = ["40:60", "50:50", "60:40"]
-#plot_all_combined_results([results_40_60, results_50_50, results_60_40], labels1)
+labels0 = ["40:60", "50:50", "60:40"]
+#plot_all_combined_results([results_40_60, results_50_50, results_60_40], labels0)
 
-labels2 = ["zealot = 0.9", "zealot = 1", "zealot = 1.1"]
-plot_all_combined_results([results_low_zealot, results_benchmark, results_high_zealot], labels2)
+labels1 = [r"40% up initial", r"50% up initial", r"60% up initial"]
+plot_all_combined_results([results_40_up, results_benchmark, results_60_up], labels1)
+
+labels2 = ["zealot field = 0.8", "zealot field = 0.9", "zealot field = 1", "zealot field= 1.1"]
+plot_all_combined_results([results_lower_z_field, results_low_z_field, results_benchmark, results_high_z_field], labels2)
+
+labels3 = ["zealot interaction= 0.99", "zealot interaction= 1.00", "zealot interaction= 1.01", "zealot interaction= 1.02"]
+plot_all_combined_results([results_negative_interaction, results_low_interaction, results_benchmark, results_high_interaction], labels3)
