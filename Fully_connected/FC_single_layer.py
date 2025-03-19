@@ -145,7 +145,7 @@ def run_parallel_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s,
         results_dict[temp]['zealot_spins'].append(zealot_spins)
     
     return results_dict 
-    
+
 def post_process_combined_results(all_magnetizations, all_zealot_spins, burn_in_steps, time_average_proportion):
     # Convert inputs to numpy arrays if they aren't already
     all_magnetizations = np.array(all_magnetizations)
@@ -187,10 +187,10 @@ def post_process_combined_results(all_magnetizations, all_zealot_spins, burn_in_
     f_minus = np.count_nonzero(spin_negative_indices) / total_runs
     
     # Calculate averages
-    m_plus_avg = np.mean(m_plus) if m_plus.size > 0 else 0
-    m_minus_avg = np.mean(m_minus) if m_minus.size > 0 else 0
-    z_plus_avg = np.mean(z_plus) if z_plus.size > 0 else 0
-    z_minus_avg = np.mean(z_minus) if z_minus.size > 0 else 0
+    m_plus_avg = np.mean(m_plus) if m_plus.size > 0 else np.nan
+    m_minus_avg = np.mean(m_minus) if m_minus.size > 0 else np.nan
+    z_plus_avg = np.mean(z_plus) if z_plus.size > 0 else np.nan
+    z_minus_avg = np.mean(z_minus) if z_minus.size > 0 else np.nan
     
     # Calculate standard errors
     m_plus_std_error = np.std(time_avg_magnetizations[mag_positive_indices]) / np.sqrt(np.sum(mag_positive_indices)) if np.sum(mag_positive_indices) > 0 else 0
@@ -204,24 +204,30 @@ def post_process_combined_results(all_magnetizations, all_zealot_spins, burn_in_
     f_minus_std_error = np.sqrt((f_minus * (1 - f_minus)) / total_runs)
     
     # Calculate weighted averages
-    average_magnetization = m_plus_avg * g_plus + m_minus_avg * g_minus
-    average_zealot_spin = z_plus_avg * f_plus + z_minus_avg * f_minus
-    
+    m_plus_term = m_plus_avg * g_plus if not np.isnan(m_plus_avg) else 0
+    m_minus_term = m_minus_avg * g_minus if not np.isnan(m_minus_avg) else 0
+    average_magnetization = m_plus_term + m_minus_term
+
+    z_plus_term = z_plus_avg * f_plus if not np.isnan(z_plus_avg) else 0
+    z_minus_term = z_minus_avg * f_minus if not np.isnan(z_minus_avg) else 0
+    average_zealot_spin = z_plus_term + z_minus_term
+
+
     # Calculate errors of weighted averages using error propagation
     # For a function f(x,y,z,w) = ax + by, the error is:
     # σf² = (∂f/∂x)²σx² + (∂f/∂y)²σy² + (∂f/∂z)²σz² + (∂f/∂w)²σw²
     average_magnetization_std_error = np.sqrt(
-        (g_plus * m_plus_std_error)**2 +      # (∂M/∂m₊ σm₊)² = (g₊ σm₊)²
-        (g_minus * m_minus_std_error)**2 +    # (∂M/∂m₋ σm₋)² = (g₋ σm₋)²
-        (m_plus_avg * g_plus_std_error)**2 +  # (∂M/∂g₊ σg₊)² = (m₊ σg₊)²
-        (m_minus_avg * g_minus_std_error)**2  # (∂M/∂g₋ σg₋)² = (m₋ σg₋)²
+        (g_plus * m_plus_std_error)**2 if not np.isnan(m_plus_avg) else 0 +      # (∂M/∂m₊ σm₊)² = (g₊ σm₊)²
+        (g_minus * m_minus_std_error)**2 if not np.isnan(m_minus_avg) else 0 +    # (∂M/∂m₋ σm₋)² = (g₋ σm₋)²
+        (m_plus_avg * g_plus_std_error)**2 if not np.isnan(m_plus_avg) else 0 +  # (∂M/∂g₊ σg₊)² = (m₊ σg₊)²
+        (m_minus_avg * g_minus_std_error)**2 if not np.isnan(m_minus_avg) else 0  # (∂M/∂g₋ σg₋)² = (m₋ σg₋)²
     )
-    
+
     average_zealot_spin_std_error = np.sqrt(
-        (f_plus * z_plus_std_error)**2 +      # (∂Z/∂z₊ σz₊)² = (f₊ σz₊)²
-        (f_minus * z_minus_std_error)**2 +    # (∂Z/∂z₋ σz₋)² = (f₋ σz₋)²
-        (z_plus_avg * f_plus_std_error)**2 +  # (∂Z/∂f₊ σf₊)² = (z₊ σf₊)²
-        (z_minus_avg * f_minus_std_error)**2  # (∂Z/∂f₋ σf₋)² = (z₋ σf₋)²
+        (f_plus * z_plus_std_error)**2 if not np.isnan(z_plus_avg) else 0 +      # (∂Z/∂z₊ σz₊)² = (f₊ σz₊)²
+        (f_minus * z_minus_std_error)**2 if not np.isnan(z_minus_avg) else 0 +    # (∂Z/∂z₋ σz₋)² = (f₋ σz₋)²
+        (z_plus_avg * f_plus_std_error)**2 if not np.isnan(z_plus_avg) else 0 +  # (∂Z/∂f₊ σf₊)² = (z₊ σf₊)²
+        (z_minus_avg * f_minus_std_error)**2 if not np.isnan(z_minus_avg) else 0  # (∂Z/∂f₋ σf₋)² = (z₋ σf₋)²
     )
     
     # Compile all results into a dictionary
@@ -481,21 +487,21 @@ def plot_zealot_statistics_vs_temperature(results):
     plt.show()  
   
 # Parameters
-L = 100  # Size of the lattice (LxL)
+L = 50  # Size of the lattice (LxL)
 N=L**2
 zealot_spin = -1
 k_B = 1     #.380649e-23  # Boltzmann constant
-num_iterations = N*10  # Total number of iterations
+num_iterations = N*50  # Total number of iterations
 J_b = 1/(N-1)  # Coupling constant
 J_s = 1.01
 h_b= -1
 h_s = N
 number_of_MC_steps = 2
-seeds = np.linspace(1,5,5).astype(int).tolist()
-temperatures = np.linspace(0.1,1.1,10).tolist()
+seeds = np.linspace(1,20,20).astype(int).tolist()
+temperatures = np.linspace(0.1,1.5,10).tolist()
 burn_in_steps = int((num_iterations/(number_of_MC_steps*N))*0.8)
-time_average_proportion = 0.8
-initial_up_ratio = 0.6
+time_average_proportion = 0
+initial_up_ratio = 0.5
 
 temperatures
 # Run the simulation for all temperatures in parallel

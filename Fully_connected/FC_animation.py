@@ -152,3 +152,10 @@ plt.show()
 
 
 
+import numpy as np
+
+ratios = np.linspace(0.4, 0.6, 50).tolist()  # Range of initial up ratios
+
+filtered_ratios = [r for r in ratios if 0.475 <= r <= 0.525]
+
+print(filtered_ratios)
