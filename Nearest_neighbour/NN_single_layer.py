@@ -26,6 +26,7 @@ def calculate_energy_change(lattice, L, i, j, J_b, h_b, J_s, zealot_spin):
     social_influence = -J_b*neighbor_sum
     internal_field = -h_b*spin
     leader_influence= -J_s*zealot_spin*spin
+    
     return -2*(social_influence+internal_field+leader_influence)
 
 def calculate_energy_change_zealot(zealot_spin, magnetization, L, J_s, h_s):
@@ -35,6 +36,7 @@ def calculate_energy_change_zealot(zealot_spin, magnetization, L, J_s, h_s):
 
     leader_field = -h_s*zealot_spin
     leader_influence = -J_s*zealot_spin*magnetization 
+    
     return -2*(leader_influence+leader_field)
 
 def safe_exp(delta_E, temp, k_B):
@@ -76,33 +78,34 @@ def create_lookup_table(temp, k_B, J_b, h_b, J_s):
 
     return lookup_table
 
-def metropolis_step(lattice, L, J_b, h_b, h_s, J_s, zealot_spin, lookup_table):
+def metropolis_step(lattice, L, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, magnetization):
     """
-    Perform one Monte Carlo step on the lattice.
+    Perform one Metropolis step on the lattice and update the magnetization.
     """
-
     i, j = np.random.randint(0, L), np.random.randint(0, L)
     delta_E = calculate_energy_change(lattice, L, i, j, J_b, h_b, J_s, zealot_spin)
     
-    if np.random.rand() < lookup_table.get(delta_E, 0):
+    if np.random.rand() < safe_exp(delta_E, temp, k_B):
         lattice[i, j] *= -1  # Flip the spin
-  
+        magnetization += 2*lattice[i, j]
+
+    return magnetization
+    
 def run_individual_simulation(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, initial_up_ratio=0.5):
     np.random.seed(seed)
     zealot_spin = np.random.choice([-1, 1])
-    lookup_table = create_lookup_table(temp, k_B, J_b, h_b, J_s)
     p_up = initial_up_ratio
     p_down = 1 - initial_up_ratio
     lattice = np.random.choice([-1, 1], size=(L, L), p=[p_down, p_up])
     magnetization_record_interval = number_of_MC_steps * N
-
+    magnetization = np.sum(lattice)  # Initial magnetization
 
     # Preallocate the array for magnetization values
     num_intervals = num_iterations // magnetization_record_interval
     total_recalculations = num_intervals + 1 + (1 if num_iterations % magnetization_record_interval > 0 else 0)
     magnetization_array = np.zeros(total_recalculations, dtype=np.float64)
     zealot_array = np.zeros(total_recalculations, dtype=np.float64)
-    magnetization_array[0] = np.sum(lattice)
+    magnetization_array[0] = magnetization
     zealot_array[0] = zealot_spin
     recalculation_index = 1
 
@@ -110,9 +113,8 @@ def run_individual_simulation(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_
     for interval in tqdm(range(num_intervals), desc=f"Temp {temp}, Seed {seed}"):
         for step in range(number_of_MC_steps):
             for _ in range(N): 
-                metropolis_step(lattice, L, J_b, h_b, h_s, J_s, zealot_spin, lookup_table)
+                magnetization = metropolis_step(lattice, L, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, magnetization)
 
-            magnetization = np.sum(lattice)
             delta_E_zealot = calculate_energy_change_zealot(zealot_spin, magnetization, L, J_s, h_s)
             if np.random.rand() < safe_exp(delta_E_zealot, temp, k_B):
                 zealot_spin *= -1  # Flip the spin
@@ -121,7 +123,7 @@ def run_individual_simulation(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_
         zealot_array[recalculation_index] = zealot_spin
         recalculation_index += 1
         
-
+        
     # Handle any remaining steps if num_iterations is not an exact multiple of recalculation_interval
     remaining_steps = num_iterations % magnetization_record_interval
     if remaining_steps > 0:
@@ -130,19 +132,18 @@ def run_individual_simulation(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_
 
         for _ in range(full_zealot_updates):  # Full zealot updates
             for _ in range(N):
-                metropolis_step(lattice, L, J_b, h_b, h_s, J_s, zealot_spin, lookup_table, magnetization)
+                magnetization = metropolis_step(lattice, L, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, magnetization)
 
             # Update zealot spin every L^2 steps
-            magnetization = np.sum(lattice)
             delta_E_zealot = calculate_energy_change_zealot(zealot_spin, magnetization, L, J_s, h_s)
             if np.random.rand() < safe_exp(delta_E_zealot, temp, k_B):
                 zealot_spin *= -1
 
         # Handle any remaining steps without a zealot recalculation
         for _ in range(extra_steps):
-            metropolis_step(lattice, L, J_b, h_b, h_s, J_s, zealot_spin, lookup_table, magnetization)
+            magnetization = metropolis_step(lattice, L, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, magnetization)
 
-        magnetization = np.sum(lattice)
+        # Final recalculation for the last segment
         magnetization_array[recalculation_index] = magnetization
         zealot_array[recalculation_index] = zealot_spin
         
@@ -521,19 +522,18 @@ N=L**2
 zealot_spin = 1
 k_B = 1     #.380649e-23  # Boltzmann constant
 num_iterations = N*200  # Total number of iterations
-J_b = 1#1/4  # Coupling constant
-J_s = 0#1.01
-h_b= 0#-1
-h_s = 0#N
-seeds = list(np.linspace(1,10,10, dtype = int))
+J_b = 1/4  # Coupling constant
+J_s = 1.01
+h_b= -1
+h_s = N
 number_of_MC_steps = 2
-temperatures = list(np.linspace(0.1,0.5,3))
-burn_in_steps = int((num_iterations/(number_of_MC_steps*N))*0.5)
+seeds = np.linspace(1,5,5).astype(int).tolist()
+temperatures = np.linspace(0.1,1,5).tolist()
+burn_in_steps = int((num_iterations/(number_of_MC_steps*N))*0.8)
 time_average_proportion = 0
-initial_up_ratio=0.5
+initial_up_ratio = 0.5
 
 start = time.time()
-
 # Run the simulation for all temperatures in parallel
 simulation_results = run_parallel_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, initial_up_ratio)
 end = time.time()

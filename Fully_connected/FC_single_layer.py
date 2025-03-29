@@ -336,7 +336,10 @@ def plot_magnetization_over_time(simulation_results):
         all_magnetizations = data['magnetizations']
         plt.figure(figsize=(10, 6))
         for i, magnetization in enumerate(all_magnetizations):
-            plt.plot(magnetization, label=f"Seed {i}")
+            # Create proper x values - multiply by 2 to fix the scaling
+            x_values = [step * 2 for step in range(len(magnetization))]
+            # Use x_values in the plot
+            plt.plot(x_values, magnetization, label=f"Seed {i}")
         
         plt.xlabel("Monte Carlo Steps")
         plt.ylabel("Magnetization")
@@ -485,18 +488,38 @@ def plot_zealot_statistics_vs_temperature(results):
     plt.legend()
     plt.tight_layout()
     plt.show()  
+
+def plot_zealot_spin_over_time(simulation_results):
+    for temp, data in simulation_results.items():       
+        all_zealot_spins = data['zealot_spins']
+        plt.figure(figsize=(10, 6))
+        for i, zealot_spin in enumerate(all_zealot_spins):
+            # Create proper x values - multiply by 2 to fix the scaling
+            x_values = [step * 2 for step in range(len(zealot_spin))]
+            # Use x_values in the plot
+            plt.plot(x_values, zealot_spin, label=f"Seed {i}")
+        
+        plt.xlabel("Monte Carlo Steps")
+        plt.ylabel("Zealot Spin")
+        plt.title(f"Zealot Spin Over Time (T = {temp})")
+        plt.grid(True)
+        plt.legend(loc='best', fontsize=8)
+        plt.ylim(-1.5, 1.5)  # Ensure spin values are clearly visible
+        plt.tight_layout()
+        plt.show()
+        
   
 # Parameters
-L = 50  # Size of the lattice (LxL)
+L = 100  # Size of the lattice (LxL)
 N=L**2
 zealot_spin = -1
 k_B = 1     #.380649e-23  # Boltzmann constant
-num_iterations = N*50  # Total number of iterations
+num_iterations = N*5  # Total number of iterations
 J_b = 1/(N-1)  # Coupling constant
 J_s = 1.01
 h_b= -1
 h_s = N
-number_of_MC_steps = 2
+number_of_MC_steps = 1
 seeds = np.linspace(1,20,20).astype(int).tolist()
 temperatures = np.linspace(0.1,1.5,10).tolist()
 burn_in_steps = int((num_iterations/(number_of_MC_steps*N))*0.8)
@@ -513,12 +536,26 @@ print("It took", length, "seconds!")
 
 
 
+
 plot_magnetization_over_time(simulation_results)
+plot_zealot_spin_over_time(simulation_results)
+
 processed_results_lists = process_all_results(simulation_results, burn_in_steps, time_average_proportion)
 plot_average_magnetizations_vs_temperature(processed_results_lists)
 plot_m_plus_minus_vs_temperature(processed_results_lists)
 plot_g_plus_minus_vs_temperature(processed_results_lists)
 plot_zealot_statistics_vs_temperature(processed_results_lists)
   
+
+
+np.random.seed(4)
+zealot_spin = np.random.choice([-1, 1])
+zealot_spin
+
+
+temperatures = np.linspace(0.1,1.5,50).tolist()
+
+temperatures
+
 
 

@@ -19,17 +19,28 @@ J_s = 1.01
 h_b= -1
 h_s = N
 number_of_MC_steps = 2
-seeds = np.linspace(1,20,20).astype(int).tolist()
+seeds = np.linspace(1,1000,1000).astype(int).tolist()
 temperatures = np.linspace(0.1,1.5,50).tolist()
-burn_in_steps = int((num_iterations/(number_of_MC_steps*N))*0.5)
-time_average_proportion = 0.8
-initial_up_ratio =0.5
+burn_in_steps = int((num_iterations/(number_of_MC_steps*N))*0.6)
+time_average_proportion = 0
+initial_up_ratio = 0.5
 results_path = save_results(
     simulation_type="fully_connected", 
-    initial_up_ratio=0.7,  # The varied value
-    J_s=1.01,
+    initial_up_ratio=initial_up_ratio,  # The varied value
+    J_s=J_s,
     h_s=h_s,
-    varied_param="ratio"  # Specify which parameter is being varied
+    varied_param="ratio",  # Specify which parameter is being varied
+    L=L,
+    N=N,
+    zealot_spin=zealot_spin,
+    k_B=k_B,
+    num_iterations=num_iterations,
+    J_b=J_b,
+    h_b=h_b,
+    number_of_MC_steps=number_of_MC_steps,
+    seeds=seeds,
+    temperatures=temperatures,
+    burn_in_steps=burn_in_steps
 )
 
 # Run the simulation for all temperatures in parallel
