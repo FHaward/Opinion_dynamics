@@ -107,8 +107,8 @@ J_s = 1.01
 h_b = -1
 h_s = N
 number_of_MC_steps = 2
-seed = 7
-temp = 0.1
+seed = 13
+temp = 0.98286
 
 # Run the simulation
 magnetization, lattice_snapshots = run_simulation_with_snapshots(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps)

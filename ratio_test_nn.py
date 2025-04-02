@@ -8,146 +8,6 @@ import json
 from datetime import datetime
 
 
-def calculate_energy_change_fc(lattice, L, i, j, J_b, h_b, J_s, zealot_spin, magnetization): 
-    """
-    Calculate the energy change that would occur if the spin at (i, j) is flipped.
-    """
-    # Get the spin at the selected site
-    spin = lattice[i, j]
-    
-
-    # Calculate energy change ΔE
-    social_influence = -J_b*(magnetization-spin)*spin
-    internal_field = -h_b*spin
-    leader_influence= -J_s*zealot_spin*spin
-    
-    return -2*(social_influence+internal_field+leader_influence)
-
-def calculate_energy_change_zealot_fc(zealot_spin, magnetization, L, J_s, h_s):
-    """
-    Calculate the energy change that would occur if the zealot spin is flipped.
-    """
-
-    leader_field = -h_s*zealot_spin
-    leader_influence = -J_s*zealot_spin*magnetization 
-    
-    return -2*(leader_influence+leader_field)
-
-def safe_exp(delta_E, temp, k_B):
-    """
-    Compute exp(-ΔE/kT) for large energy changes without try/except.
-    Uses direct value checks to prevent overflow/underflow.
-    """
-    beta_delta_E = -delta_E / (k_B * temp)
-    
-    # For large negative values, return exp(700) as upper limit
-    if beta_delta_E > 700:  # exp(700) is near the maximum float64 can handle
-        return np.exp(700)
-    # For large positive values, return exp(-700) as lower limit
-    elif beta_delta_E < -700:
-        return np.exp(-700)
-    # For manageable values, compute normally
-    else:
-        return np.exp(beta_delta_E)
-   
-def metropolis_step_fc(lattice, L, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, magnetization):
-    """
-    Perform one Metropolis step on the lattice and update the magnetization.
-    """
-    i, j = np.random.randint(0, L), np.random.randint(0, L)
-    delta_E = calculate_energy_change_fc(lattice, L, i, j, J_b, h_b, J_s, zealot_spin, magnetization)
-    
-    if np.random.rand() < safe_exp(delta_E, temp, k_B):
-        lattice[i, j] *= -1  # Flip the spin
-        magnetization += 2*lattice[i, j]
-
-    return magnetization
-    
-def run_individual_simulation_fc(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, initial_up_ratio=0.5):
-    np.random.seed(seed)
-    zealot_spin = np.random.choice([-1, 1])
-    p_up = initial_up_ratio
-    p_down = 1 - initial_up_ratio
-    lattice = np.random.choice([-1, 1], size=(L, L), p=[p_down, p_up])
-    magnetization_record_interval = number_of_MC_steps * N
-    magnetization = np.sum(lattice)  # Initial magnetization
-
-    # Preallocate the array for magnetization values
-    num_intervals = num_iterations // magnetization_record_interval
-    total_recalculations = num_intervals + 1 + (1 if num_iterations % magnetization_record_interval > 0 else 0)
-    magnetization_array = np.zeros(total_recalculations, dtype=np.float64)
-    zealot_array = np.zeros(total_recalculations, dtype=np.float64)
-    magnetization_array[0] = magnetization
-    zealot_array[0] = zealot_spin
-    recalculation_index = 1
-
-    # Loop over each interval
-    for interval in range(num_intervals):
-        for step in range(number_of_MC_steps):
-            for _ in range(N): 
-                magnetization = metropolis_step_fc(lattice, L, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, magnetization)
-
-            delta_E_zealot = calculate_energy_change_zealot_fc(zealot_spin, magnetization, L, J_s, h_s)
-            if np.random.rand() < safe_exp(delta_E_zealot, temp, k_B):
-                zealot_spin *= -1  # Flip the spin
-
-        magnetization_array[recalculation_index] = magnetization
-        zealot_array[recalculation_index] = zealot_spin
-        recalculation_index += 1
-        
-        
-    # Handle any remaining steps if num_iterations is not an exact multiple of recalculation_interval
-    remaining_steps = num_iterations % magnetization_record_interval
-    if remaining_steps > 0:
-        full_zealot_updates = remaining_steps // N
-        extra_steps = remaining_steps % N
-
-        for _ in range(full_zealot_updates):  # Full zealot updates
-            for _ in range(N):
-                magnetization = metropolis_step_fc(lattice, L, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, magnetization)
-
-            # Update zealot spin every L^2 steps
-            delta_E_zealot = calculate_energy_change_zealot_fc(zealot_spin, magnetization, L, J_s, h_s)
-            if np.random.rand() < safe_exp(delta_E_zealot, temp, k_B):
-                zealot_spin *= -1
-
-        # Handle any remaining steps without a zealot recalculation
-        for _ in range(extra_steps):
-            magnetization = metropolis_step_fc(lattice, L, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, magnetization)
-
-        # Final recalculation for the last segment
-        magnetization_array[recalculation_index] = magnetization
-        zealot_array[recalculation_index] = zealot_spin
-        
-    all_magnetizations = magnetization_array/N
-                   
-    return temp, all_magnetizations, zealot_array
-
-def run_parallel_simulations_fc(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, initial_up_ratio=0.5):
-    """
-    Run simulations for all temperature-seed combinations in parallel.
-    """
-    combinations = list(itertools.product(temperatures, seeds))
-    
-    # Run all combinations in parallel
-    results = Parallel(n_jobs=-1, backend="loky")(
-        delayed(run_individual_simulation_fc)(
-            seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, 
-            num_iterations, number_of_MC_steps, initial_up_ratio
-        ) for temp, seed in combinations
-    )
-    
-    # Organize results by temperature
-    results_dict = {}
-    for temp, magnetizations, zealot_spins in results:
-        if temp not in results_dict:
-            results_dict[temp] = {'magnetizations': [], 'zealot_spins': []}
-        results_dict[temp]['magnetizations'].append(magnetizations)
-        results_dict[temp]['zealot_spins'].append(zealot_spins)
-    
-    return results_dict 
-
-
 
 def calculate_energy_change_nn(lattice, L, i, j, J_b, h_b, J_s, zealot_spin):
     """
@@ -179,28 +39,23 @@ def calculate_energy_change_zealot_nn(zealot_spin, magnetization, L, J_s, h_s):
     leader_influence = -J_s*zealot_spin*magnetization 
     return -2*(leader_influence+leader_field)
 
-def create_lookup_table(temp, k_B, J_b, h_b, J_s):
-    # Define the possible values of ΔE (based on neighbors and fields)
-    possible_neighbor_sums = np.array([-4, -2, 0, 2, 4])  # Neighboring spins sum possibilities
-    possible_internal_field= np.array([h_b,-h_b])
-    possible_leader_influence= np.array([J_s,-J_s])
-
-    # Combine the two contributions to calculate all ΔE values
-    delta_E_values = []
-    for neighbor_sum in possible_neighbor_sums:
-        for internal_field in possible_internal_field:
-            for leader_influence in possible_leader_influence:
-                    delta_E = -2 * ((J_b*neighbor_sum)+internal_field+leader_influence)
-                    delta_E_values.append(delta_E)
-
-    # Remove duplicates and sort
-    delta_E_values = np.unique(delta_E_values)
-
-    # Precompute exponential values for all ΔE
-    lookup_table = {delta_E: safe_exp(delta_E, temp, k_B) for delta_E in delta_E_values}
-
-    return lookup_table
-
+def safe_exp(delta_E, temp, k_B):
+    """
+    Compute exp(-ΔE/kT) for large energy changes without try/except.
+    Uses direct value checks to prevent overflow/underflow.
+    """
+    beta_delta_E = -delta_E / (k_B * temp)
+    
+    # For large negative values, return exp(700) as upper limit
+    if beta_delta_E > 700:  # exp(700) is near the maximum float64 can handle
+        return np.exp(700)
+    # For large positive values, return exp(-700) as lower limit
+    elif beta_delta_E < -700:
+        return np.exp(-700)
+    # For manageable values, compute normally
+    else:
+        return np.exp(beta_delta_E)
+   
 def metropolis_step_nn(lattice, L, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, magnetization):
     """
     Perform one Monte Carlo step on the lattice.
@@ -239,7 +94,7 @@ def run_individual_simulation_nn(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zeal
             for _ in range(N): 
                 magnetization = metropolis_step_nn(lattice, L, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, magnetization)
 
-            delta_E_zealot = calculate_energy_change_zealot_fc(zealot_spin, magnetization, L, J_s, h_s)
+            delta_E_zealot = calculate_energy_change_zealot_nn(zealot_spin, magnetization, L, J_s, h_s)
             if np.random.rand() < safe_exp(delta_E_zealot, temp, k_B):
                 zealot_spin *= -1  # Flip the spin
 
@@ -259,7 +114,7 @@ def run_individual_simulation_nn(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zeal
                 magnetization = metropolis_step_nn(lattice, L, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, magnetization)
 
             # Update zealot spin every L^2 steps
-            delta_E_zealot = calculate_energy_change_zealot_fc(zealot_spin, magnetization, L, J_s, h_s)
+            delta_E_zealot = calculate_energy_change_zealot_nn(zealot_spin, magnetization, L, J_s, h_s)
             if np.random.rand() < safe_exp(delta_E_zealot, temp, k_B):
                 zealot_spin *= -1
 
@@ -275,31 +130,30 @@ def run_individual_simulation_nn(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zeal
                    
     return temp, all_magnetizations, zealot_array
   
-def run_parallel_simulations_nn(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, initial_up_ratio=0.5):
+
+def run_parallel_simulations(ratios, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, temp):
     """
-    Run simulations for all temperature-seed combinations in parallel.
+    Run simulations for all ratio-seed combinations in parallel.
     """
-    combinations = list(itertools.product(temperatures, seeds))
+    combinations = list(itertools.product(ratios, seeds))
     
     # Run all combinations in parallel
-    results = Parallel(n_jobs=-1)(
+    results = Parallel(n_jobs=-1, backend="loky")(
         delayed(run_individual_simulation_nn)(
-            seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin,
-            num_iterations, number_of_MC_steps, initial_up_ratio
-        ) for temp, seed in combinations
+            seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, 
+            num_iterations, number_of_MC_steps, ratio
+        ) for ratio, seed in combinations
     )
     
-    # Organize results by temperature
+    # Organize results by ratio
     results_dict = {}
-    for temp, magnetizations, zealot_spins in results:
-        if temp not in results_dict:
-            results_dict[temp] = {'magnetizations': [], 'zealot_spins': []}
-        results_dict[temp]['magnetizations'].append(magnetizations)
-        results_dict[temp]['zealot_spins'].append(zealot_spins)
+    for ratio, magnetizations, zealot_spins in results:
+        if ratio not in results_dict:
+            results_dict[ratio] = {'magnetizations': [], 'zealot_spins': []}
+        results_dict[ratio]['magnetizations'].append(magnetizations)
+        results_dict[ratio]['zealot_spins'].append(zealot_spins)
     
     return results_dict 
-
-
 
 def post_process_combined_results(all_magnetizations, all_zealot_spins, burn_in_steps, time_average_proportion):
     # Convert inputs to numpy arrays if they aren't already
@@ -370,19 +224,18 @@ def post_process_combined_results(all_magnetizations, all_zealot_spins, burn_in_
 
     # Calculate errors of weighted averages using error propagation
     # For a function f(x,y,z,w) = ax + by, the error is:
-    # σf² = (∂f/∂x)²σx² + (∂f/∂y)²σy² + (∂f/∂z)²σz² + (∂f/∂w)²σw²
     average_magnetization_std_error = np.sqrt(
-        (g_plus * m_plus_std_error)**2 if not np.isnan(m_plus_avg) else 0 +      # (∂M/∂m₊ σm₊)² = (g₊ σm₊)²
-        (g_minus * m_minus_std_error)**2 if not np.isnan(m_minus_avg) else 0 +    # (∂M/∂m₋ σm₋)² = (g₋ σm₋)²
-        (m_plus_avg * g_plus_std_error)**2 if not np.isnan(m_plus_avg) else 0 +  # (∂M/∂g₊ σg₊)² = (m₊ σg₊)²
-        (m_minus_avg * g_minus_std_error)**2 if not np.isnan(m_minus_avg) else 0  # (∂M/∂g₋ σg₋)² = (m₋ σg₋)²
+        (g_plus * m_plus_std_error)**2 if not np.isnan(m_plus_avg) else 0 +     
+        (g_minus * m_minus_std_error)**2 if not np.isnan(m_minus_avg) else 0 +    
+        (m_plus_avg * g_plus_std_error)**2 if not np.isnan(m_plus_avg) else 0 + 
+        (m_minus_avg * g_minus_std_error)**2 if not np.isnan(m_minus_avg) else 0 
     )
 
     average_zealot_spin_std_error = np.sqrt(
-        (f_plus * z_plus_std_error)**2 if not np.isnan(z_plus_avg) else 0 +      # (∂Z/∂z₊ σz₊)² = (f₊ σz₊)²
-        (f_minus * z_minus_std_error)**2 if not np.isnan(z_minus_avg) else 0 +    # (∂Z/∂z₋ σz₋)² = (f₋ σz₋)²
-        (z_plus_avg * f_plus_std_error)**2 if not np.isnan(z_plus_avg) else 0 +  # (∂Z/∂f₊ σf₊)² = (z₊ σf₊)²
-        (z_minus_avg * f_minus_std_error)**2 if not np.isnan(z_minus_avg) else 0  # (∂Z/∂f₋ σf₋)² = (z₋ σf₋)²
+        (f_plus * z_plus_std_error)**2 if not np.isnan(z_plus_avg) else 0 +      
+        (f_minus * z_minus_std_error)**2 if not np.isnan(z_minus_avg) else 0 +   
+        (z_plus_avg * f_plus_std_error)**2 if not np.isnan(z_plus_avg) else 0 +  
+        (z_minus_avg * f_minus_std_error)**2 if not np.isnan(z_minus_avg) else 0 
     )
     
     # Compile all results into a dictionary
@@ -489,48 +342,44 @@ def save_plot(plt, filename):
     """Save the current plot and close it."""
     plt.savefig(filename)
     plt.close()
-    
+      
 def plot_magnetization_over_time(simulation_results, save_path):
-    for temp, data in simulation_results.items():       
+    for ratio, data in simulation_results.items():       
         all_magnetizations = data['magnetizations']
         plt.figure(figsize=(10, 6))
         for i, magnetization in enumerate(all_magnetizations):
-            # Create proper x values - multiply by 2 to fix the scaling
-            x_values = [step * 2 for step in range(len(magnetization))]
-            # Use x_values in the plot
-            plt.plot(x_values, magnetization, label=f"Seed {i}")
-          
+            plt.plot(magnetization, label=f"Seed {i}")
+        
         plt.xlabel("Monte Carlo Steps")
         plt.ylabel("Magnetization")
-        plt.title(f"Magnetization Over Time (T = {temp})")
+        plt.title(f"Magnetization Over Time (Ratio = {ratio:.2f})")
         plt.grid(True)
         plt.tight_layout()
-        save_plot(plt, os.path.join(save_path, f"magnetization_over_time_T={temp}.png"))
+        save_plot(plt, os.path.join(save_path, f"magnetization_over_time_ratio={ratio:.2f}.png"))
 
-def plot_average_magnetizations_vs_temperature(results, save_path):
-    # Extract temperatures and average magnetizations
-    temperatures = results['temperatures']
+def plot_average_magnetizations_vs_ratio(results, save_path, temp):
+    # Extract ratios and average magnetizations
+    ratios = results['ratios']
     average_magnetizations = results['average_magnetizations']
     standard_errors = results['average_magnetizations_std_errors']
     
     plt.figure(figsize=(8, 5))
-    plt.errorbar(temperatures, average_magnetizations, 
+    plt.errorbar(ratios, average_magnetizations, 
                  yerr=standard_errors,
                  marker="o", label="Average Magnetization", color="blue", 
                  capsize=5, ecolor='gray')
     
-    plt.xlabel("Temperature", fontsize=12)
+    plt.xlabel("Initial Up Ratio", fontsize=12)
     plt.ylabel("Average Magnetization", fontsize=12)
-    plt.title("Average Magnetization vs. Temperature", fontsize=14)
+    plt.title(f"Average Magnetization vs. Initial Up Ratio (T = {temp})", fontsize=14)
     plt.grid(True)
     plt.legend()
-    
     plt.tight_layout()
-    save_plot(plt, os.path.join(save_path, "avg_magnetization_vs_temp.png"))
+    save_plot(plt, os.path.join(save_path, "avg_magnetization_vs_ratio.png"))
 
-def plot_m_plus_minus_vs_temperature(results, save_path):
+def plot_m_plus_minus_vs_ratio(results, save_path, temp):
     # Extract data
-    temperatures = results['temperatures']
+    ratios = results['ratios']
     m_plus_avgs = results['m_plus_avgs']
     m_minus_avgs = results['m_minus_avgs']
     m_plus_errors = results['m_plus_avgs_std_errors']
@@ -538,26 +387,27 @@ def plot_m_plus_minus_vs_temperature(results, save_path):
     
     # Create a plot
     plt.figure(figsize=(8, 5))
-    plt.errorbar(temperatures, m_plus_avgs, yerr=m_plus_errors, 
-                 marker="o", label="$m_+$ (Fraction Positive)", color="blue", 
+    plt.errorbar(ratios, m_plus_avgs, yerr=m_plus_errors, 
+                 marker="o", label="$m_+$ (Positive)", color="blue", 
                  capsize=5, ecolor='gray')
-    plt.errorbar(temperatures, m_minus_avgs, yerr=m_minus_errors, 
-                 marker="s", label="$m_-$ (Fraction Negative)", color="orange", 
+    plt.errorbar(ratios, m_minus_avgs, yerr=m_minus_errors, 
+                 marker="s", label="$m_-$ (Negative)", color="orange", 
                  capsize=5, ecolor='gray')
     
     # Add labels, title, and grid
-    plt.xlabel("Temperature", fontsize=14)
+    plt.xlabel("Initial Up Ratio", fontsize=14)
     plt.ylabel("Average Magnetization", fontsize=14)
+    plt.title(f"$m_+$ and $m_-$ vs. Initial Up Ratio (T = {temp})", fontsize=14)
     plt.grid(True)
     plt.legend()
 
     # Show the plot
     plt.tight_layout()
-    save_plot(plt, os.path.join(save_path, "m_plus_minus_vs_temp.png"))
+    save_plot(plt, os.path.join(save_path, "m_plus_minus_vs_ratio.png"))
 
-def plot_g_plus_minus_vs_temperature(results, save_path):
+def plot_g_plus_minus_vs_ratio(results, save_path, temp):
     # Extract data
-    temperatures = results['temperatures']
+    ratios = results['ratios']
     g_plus_list = results['g_plus_list']
     g_minus_list = results['g_minus_list']
     g_plus_errors = results['g_plus_std_errors']
@@ -565,133 +415,98 @@ def plot_g_plus_minus_vs_temperature(results, save_path):
 
     # Create a plot
     plt.figure(figsize=(8, 5))
-    plt.errorbar(temperatures, g_plus_list, yerr=g_plus_errors, 
+    plt.errorbar(ratios, g_plus_list, yerr=g_plus_errors, 
                  marker="o", label="$g_+$ (Fraction Positive)", color="green", 
                  capsize=5, ecolor='gray')
-    plt.errorbar(temperatures, g_minus_list, yerr=g_minus_errors, 
+    plt.errorbar(ratios, g_minus_list, yerr=g_minus_errors, 
                  marker="s", label="$g_-$ (Fraction Negative)", color="red", 
                  capsize=5, ecolor='gray')
 
     # Add labels, title, and grid
-    plt.xlabel("Temperature")
+    plt.xlabel("Initial Up Ratio")
     plt.ylabel("Fraction of Runs")
-    plt.title("$g_+$ and $g_-$ vs. Temperature")
+    plt.title(f"$g_+$ and $g_-$ vs. Initial Up Ratio (T = {temp})")
     plt.grid(True)
     plt.legend()
 
     # Show the plot
     plt.tight_layout()
-    save_plot(plt, os.path.join(save_path, "g_plus_minus_vs_temp.png"))   
+    save_plot(plt, os.path.join(save_path, "g_plus_minus_vs_ratio.png"))   
 
-def plot_zealot_statistics_vs_temperature(results, save_path):
-
-    temperatures = results['temperatures']
+def plot_zealot_statistics_vs_ratio(results, save_path, temp):
+    ratios = results['ratios']
     average_zealot_spins = results['average_zealot_spins']
     zealot_errors = results['average_zealot_spins_std_errors']
     
-    # Plot average zealot spin vs temperature
+    # Plot average zealot spin vs ratio
     plt.figure(figsize=(8, 5))
-    plt.errorbar(temperatures, average_zealot_spins, 
+    plt.errorbar(ratios, average_zealot_spins, 
                  yerr=zealot_errors,
                  marker="o", label="Average Zealot Spin", color="purple", 
                  capsize=5, ecolor='gray')
 
-    plt.xlabel("Temperature", fontsize=12)
+    plt.xlabel("Initial Up Ratio", fontsize=12)
     plt.ylabel("Average Zealot Spin", fontsize=12)
-    plt.title("Average Zealot Spin vs. Temperature", fontsize=14)
+    plt.title(f"Average Zealot Spin vs. Initial Up Ratio (T = {temp})", fontsize=14)
     plt.grid(True)
     plt.legend()
-    
     plt.tight_layout()
-    save_plot(plt, os.path.join(save_path, "avg_zealot_vs_temp.png"))
+    save_plot(plt, os.path.join(save_path, "avg_zealot_vs_ratio.png"))
 
     z_plus_avgs = results['z_plus_avgs']
     z_minus_avgs = results['z_minus_avgs']
     z_plus_errors = results['z_plus_avgs_std_errors']
     z_minus_errors = results['z_minus_avgs_std_errors']
     
-    # Plot z+ and z- vs temperature
+    # Plot z+ and z- vs ratio
     plt.figure(figsize=(8, 5))
-    plt.errorbar(temperatures, z_plus_avgs, yerr=z_plus_errors, 
-                 marker="o", label="$m_+$ (Fraction Positive)", color="blue", 
+    plt.errorbar(ratios, z_plus_avgs, yerr=z_plus_errors, 
+                 marker="o", label="$z_+$ (Positive)", color="blue", 
                  capsize=5, ecolor='gray')
-    plt.errorbar(temperatures, z_minus_avgs, yerr=z_minus_errors, 
-                 marker="s", label="$m_-$ (Fraction Negative)", color="red", 
+    plt.errorbar(ratios, z_minus_avgs, yerr=z_minus_errors, 
+                 marker="s", label="$z_-$ (Negative)", color="red", 
                  capsize=5, ecolor='gray')
 
-    plt.xlabel("Temperature", fontsize=12)
+    plt.xlabel("Initial Up Ratio", fontsize=12)
     plt.ylabel("Average Zealot Spin", fontsize=12)
-    plt.title("$z_+$ and $z_-$ vs. Temperature", fontsize=14)
+    plt.title(f"$z_+$ and $z_-$ vs. Initial Up Ratio (T = {temp})", fontsize=14)
     plt.grid(True)
     plt.legend()
-    
     plt.tight_layout()
-    save_plot(plt, os.path.join(save_path, "z_plus_minus_vs_temp.png"))
+    save_plot(plt, os.path.join(save_path, "z_plus_minus_vs_ratio.png"))
 
     f_plus_list = results['f_plus_list']
     f_minus_list = results['f_minus_list']
     f_plus_errors = results['f_plus_std_errors']
     f_minus_errors = results['f_minus_std_errors']
 
-    # Plot f+ and f- vs temperature
+    # Plot f+ and f- vs ratio
     plt.figure(figsize=(8, 5))
-    plt.errorbar(temperatures, f_plus_list, yerr=f_plus_errors, 
+    plt.errorbar(ratios, f_plus_list, yerr=f_plus_errors, 
                  marker="o", label="$f_+$ (Fraction Positive)", color="green", 
                  capsize=5, ecolor='gray')
-    plt.errorbar(temperatures, f_minus_list, yerr=f_minus_errors, 
+    plt.errorbar(ratios, f_minus_list, yerr=f_minus_errors, 
                  marker="s", label="$f_-$ (Fraction Negative)", color="orange", 
                  capsize=5, ecolor='gray')
 
-    plt.xlabel("Temperature", fontsize=12)
+    plt.xlabel("Initial Up Ratio", fontsize=12)
     plt.ylabel("Fraction of Runs", fontsize=12)
-    plt.title("$f_+$ and $f_-$ vs. Temperature", fontsize=14)
+    plt.title(f"$f_+$ and $f_-$ vs. Initial Up Ratio (T = {temp})", fontsize=14)
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
-    save_plot(plt, os.path.join(save_path, "f_plus_minus_vs_temp.png"))
+    save_plot(plt, os.path.join(save_path, "f_plus_minus_vs_ratio.png"))
   
-def save_results(
-    # Original parameters
-    simulation_type="fully_connected", 
-    initial_up_ratio=0.5, 
-    J_s=1.01, 
-    h_s=10000, 
-    varied_param=None, 
-    results_dir="./simulation_results",
-    # New parameters that were previously hardcoded in the params dictionary
-    L=None,
-    N=None,
-    zealot_spin=None,
-    k_B=None,
-    num_iterations=None,
-    J_b=None,
-    h_b=None,
-    number_of_MC_steps=None,
-    seeds=None,
-    temperatures=None,
-    burn_in_steps=None
-):
+def save_results(simulation_type="fully_connected", fixed_temp=0.5, J_s=1.01, h_s=10000, results_dir="./simulation_results"):
     """
-    Save simulation results using a hierarchical parameter-based directory structure.
+    Save simulation results to a directory with an organized parameter-based structure.
     
     Parameters:
     - simulation_type: either "fully_connected" or "nearest_neighbour"
-    - initial_up_ratio: ratio of up spins in the initial configuration
+    - fixed_temp: the fixed temperature used in the simulation
     - J_s: coupling constant between the zealot and the spins
     - h_s: field strength on the zealot
-    - varied_param: explicitly specify which parameter is being varied ("ratio", "J_s", "h_s")
     - results_dir: base directory for all results
-    - L: lattice size
-    - N: number of spins
-    - zealot_spin: initial zealot spin value
-    - k_B: Boltzmann constant
-    - num_iterations: number of iterations
-    - J_b: coupling constant between spins
-    - h_b: field strength on regular spins
-    - number_of_MC_steps: number of Monte Carlo steps
-    - seeds: random seeds used
-    - temperatures: array of temperatures used
-    - burn_in_steps: number of burn-in steps to discard
     
     Returns:
     - Path to the specific results directory for this run
@@ -700,53 +515,43 @@ def save_results(
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
     
-    # Create timestamp for this specific run
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Start with the simulation type folder
+    sim_type_dir = os.path.join(results_dir, simulation_type)
+    if not os.path.exists(sim_type_dir):
+        os.makedirs(sim_type_dir)
     
-    # Determine which parameter is being varied if not explicitly specified
-    if varied_param is None:
-        # Default to ratio if nothing specified
-        varied_param = "ratio"
-    
-    # Validate varied_param value
-    if varied_param not in ["ratio", "J_s", "h_s"]:
-        raise ValueError("varied_param must be one of: 'ratio', 'J_s', 'h_s'")
-    
-    # Format parameter values for path construction
-    ratio_str = f"ratio_{initial_up_ratio * 100}"
+    # Create the parameter-based directory structure
+    temp_str = f"T_{fixed_temp}"
     J_s_str = f"J_s_{J_s}"
     h_s_str = f"h_s_{h_s}"
     
-    # Structure the path based on which parameter is being varied
-    if varied_param == "ratio":
-        run_path = os.path.join(
-            results_dir,
-            simulation_type,
-            "ratio",
-            ratio_str,
-            f"{timestamp}_{J_s_str}_{h_s_str}"
-        )
-    elif varied_param == "J_s":
-        run_path = os.path.join(
-            results_dir,
-            simulation_type,
-            "J_s",
-            J_s_str,
-            f"{timestamp}_{ratio_str}_{h_s_str}"
-        )
-    else:  # varied_param == "h_s"
-        run_path = os.path.join(
-            results_dir,
-            simulation_type,
-            "h_s",
-            h_s_str,
-            f"{timestamp}_{ratio_str}_{J_s_str}"
-        )
+    # Create the three parallel parameter structures
+    by_temp_dir = os.path.join(sim_type_dir, "by_temperature", temp_str)
+    by_J_s_dir = os.path.join(sim_type_dir, "by_J_s", J_s_str)
+    by_h_s_dir = os.path.join(sim_type_dir, "by_h_s", h_s_str)
     
-    # Create the directory
-    os.makedirs(run_path, exist_ok=True)
+    # Create directories if they don't exist
+    for directory in [by_temp_dir, by_J_s_dir, by_h_s_dir]:
+        if not os.path.exists(directory):
+            os.makedirs(directory, exist_ok=True)
     
-    # Save parameters
+    # Create timestamp for this specific run
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Create the actual run directories with other fixed parameters in the name
+    temp_run_dir = os.path.join(by_temp_dir, f"{timestamp}_J_s_{J_s}_h_s_{h_s}")
+    J_s_run_dir = os.path.join(by_J_s_dir, f"{timestamp}_T_{fixed_temp}_h_s_{h_s}")
+    h_s_run_dir = os.path.join(by_h_s_dir, f"{timestamp}_T_{fixed_temp}_J_s_{J_s}")
+    
+    # Create all directories
+    os.makedirs(temp_run_dir, exist_ok=True)
+    os.makedirs(J_s_run_dir, exist_ok=True)
+    os.makedirs(h_s_run_dir, exist_ok=True)
+    
+    # Create a primary run directory (we'll use the temp one as primary)
+    run_dir = temp_run_dir
+    
+    # Save parameters to all three directories
     params = {
         "L": L,
         "N": N,
@@ -759,25 +564,69 @@ def save_results(
         "h_s": h_s,
         "number_of_MC_steps": number_of_MC_steps,
         "seeds": seeds,
-        "temperatures": temperatures,
+        "ratios": ratios,
+        "fixed_temperature": fixed_temp,
         "burn_in_steps": burn_in_steps,
-        "simulation_type": simulation_type,
-        "initial_ratio": initial_up_ratio,
-        "timestamp": timestamp,
-        "varied_parameter": varied_param
+        "simulation_type": simulation_type
     }
     
-    # Write parameters
-    with open(os.path.join(run_path, "parameters.json"), "w") as f:
-        # Convert any numpy values to standard Python types
-        serializable_params = {
-            key: value if not isinstance(value, (np.ndarray, list)) or not len(value) 
-                  else [float(x) if isinstance(x, np.float64) else x for x in value]
-            for key, value in params.items()
-        }
-        json.dump(serializable_params, f, indent=4)
+    # Write parameters to all three directories
+    for directory in [temp_run_dir, J_s_run_dir, h_s_run_dir]:
+        with open(os.path.join(directory, "parameters.txt"), "w") as f:
+            for key, value in params.items():
+                f.write(f"{key}: {value}\n")
     
-    # Return the directory for saving plots and other results
-    return run_path
+    # Return the primary directory for saving plots and other results
+    return run_dir
+        
 
+# Parameters
+L = 100  # Size of the lattice (LxL)
+N=L**2
+zealot_spin = 1
+k_B = 1     # Boltzmann constant
+num_iterations = N*1000  # Total number of iterations
+J_b = 1/4  # Coupling constant
+J_s = 1.01
+h_b= -1
+h_s = N
+number_of_MC_steps = 2
+seeds = np.linspace(1,200,200).astype(int).tolist()
+fixed_temp = 0.1  # Fixed temperature
+ratios = np.linspace(0.45, 0.55, 20).tolist()  # Range of initial up ratios
+burn_in_steps = int((num_iterations/(number_of_MC_steps*N))*0.8)
+time_average_proportion = 0
 
+results_path = save_results(
+    simulation_type="nearest_neighbour", 
+    fixed_temp=fixed_temp,
+    J_s=J_s,
+    h_s=h_s
+)
+
+# Run the simulation for all ratios in parallel
+start = time.time()
+simulation_results = run_parallel_simulations(ratios, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, fixed_temp)
+end = time.time()
+length = end - start
+processed_results_lists = process_all_results(simulation_results, burn_in_steps, time_average_proportion)
+
+# Create plots
+plot_magnetization_over_time(simulation_results, results_path)
+plot_average_magnetizations_vs_ratio(processed_results_lists, results_path, fixed_temp)
+plot_m_plus_minus_vs_ratio(processed_results_lists, results_path, fixed_temp)
+plot_g_plus_minus_vs_ratio(processed_results_lists, results_path, fixed_temp)
+plot_zealot_statistics_vs_ratio(processed_results_lists, results_path, fixed_temp)
+
+# Save numerical results
+with open(os.path.join(results_path, "numerical_results.json"), "w") as f:
+    # Convert numpy values to standard Python types for JSON serialization
+    serializable_results = {
+        key: [float(x) if isinstance(x, np.float64) else x for x in value]
+        for key, value in processed_results_lists.items()
+    }
+    json.dump(serializable_results, f, indent=4)
+    
+    
+    
+np.linspace(0.45, 0.55, 21).tolist()
