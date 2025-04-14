@@ -128,7 +128,7 @@ def run_individual_simulation_nn(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zeal
         
     all_magnetizations = magnetization_array/N
                    
-    return temp, all_magnetizations, zealot_array
+    return initial_up_ratio, all_magnetizations, zealot_array
   
 
 def run_parallel_simulations(ratios, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, temp):
