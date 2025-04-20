@@ -224,37 +224,43 @@ print(T_values[first_positive_index], m_minus_mf[first_positive_index])
 
 
 
-plt.figure(figsize=(8, 6))
+
+plt.figure(figsize=(8, 5))
 
 # Define high-contrast colors
 color_plus = 'blue'        # errorbar: dark
 color_minus = 'red'          # errorbar: dark
-color_mf_plus = 'orange'          # dashed line: bright
+color_mf_plus = 'gold'          # dashed line: bright
 color_mf_minus = 'cyan'  
 
 # Plot error bars with lower zorder
 if not np.isnan(m_plus).all():
     plt.errorbar(temps, m_plus, yerr=m_plus_err, 
                  marker="o", label=r"$m_+$",
-                 capsize=5, markersize=4, color=color_plus, zorder=1, linewidth=2)
+                 capsize=5, markersize=5, color=color_plus, zorder=1, linewidth=3)
 if not np.isnan(m_minus).all():
     plt.errorbar(temps, m_minus, yerr=m_minus_err, 
                  marker="s", label=r"$m_-$",
-                 capsize=5, markersize=4, color=color_minus, zorder=1, linewidth=2)
+                 capsize=5, markersize=5, color=color_minus, zorder=1, linewidth=3)
 
 # Plot dashed lines with higher zorder (on top)
 plt.plot(T_values, m_plus_mf, label=r'$m>0$ mean field',
-         linestyle=(0, (5, 5)), color=color_mf_plus, zorder=2, linewidth=2)
+         linestyle=(0, (4, 4)), color=color_mf_plus, zorder=2, linewidth=2.5)
 plt.plot(T_values[:first_positive_index], m_minus_mf[:first_positive_index],
-         label=r'$m<0$ mean field', linestyle=(0, (5, 5)), color=color_mf_minus, zorder=2, linewidth=2)
+         label=r'$m<0$ mean field', linestyle=(0, (4, 4)), color=color_mf_minus, zorder=2, linewidth=2.5)
+
+plt.axhline(y=0, linestyle='--', color='gray', linewidth=1, zorder=0)
 
 # Labels and styling
-plt.xlabel("Temperature", fontsize=12)
-plt.ylabel("Average Magnetization", fontsize=12)
-plt.title(r"$m_+$ and $m_-$ vs Temperature", fontsize=14)
-plt.grid(True, alpha=0.3)
-plt.legend()
-plt.tight_layout()
+plt.xlabel("Temperature", fontsize=14)
+plt.ylabel("Average Magnetization", fontsize=14)
+
+# Increase tick label size
+plt.tick_params(axis='both', which='major', labelsize=14)
+
+# Set legend to center left position
+plt.legend(fontsize=14, loc='center left')
+
+plt.savefig("mean_field.png", bbox_inches="tight", dpi=300)
+
 plt.show()
-
-

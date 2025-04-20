@@ -516,13 +516,13 @@ zealot_spin = -1
 k_B = 1     #.380649e-23  # Boltzmann constant
 num_iterations = N*100  # Total number of iterations
 J_b = 1/(N-1)  # Coupling constant
-J_s = 1.05
+J_s = 1
 h_b= -1
 h_s = N
 number_of_MC_steps = 2
-seeds = np.linspace(1,20,20).astype(int).tolist()
-temperatures = [0.5] #np.linspace(0.1,1.5,10).tolist()
-burn_in_steps = int((num_iterations/(number_of_MC_steps*N))*0.8)
+seeds = np.linspace(1,10,10).astype(int).tolist()
+temperatures = [0.15] #np.linspace(0.1,1.5,10).tolist()
+burn_in_steps = int((num_iterations/(number_of_MC_steps*N))*0.6)
 time_average_proportion = 0
 initial_up_ratio = 0.5
 

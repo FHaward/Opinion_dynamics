@@ -402,6 +402,175 @@ def plot_all_combined_results(results_list, labels, save_dir=None):
     plot_combined_f_plus_minus(results_list, labels,
                               save_path=os.path.join(save_dir, 'combined_f_plus_minus.png') if save_dir else None)
 
+def plot_combined_results_subplot(results_list, labels, save_path=None, figsize=(18, 12)):
+    """
+    Generate a 2x3 subplot layout with non-zealot plots on the top row
+    and zealot plots on the bottom row.
+    
+    Args:
+        results_list: List of loaded results dictionaries from load_processed_results
+        labels: List of labels for each dataset
+        save_path: Optional path to save the plot
+        figsize: Size of the figure (width, height) in inches
+    """
+    # Create a 2x3 subplot layout
+    fig, axes = plt.subplots(2, 3, figsize=figsize)
+    
+    # Define color pairs for each dataset
+    colors = [
+        ('navy', 'cornflowerblue'),          # Dark Blue, Light Blue
+        ('darkred', 'lightcoral'),           # Dark Red, Light Red
+        ('darkgreen', 'yellowgreen'),        # Dark Green, Light Green
+        ('rebeccapurple', 'plum'),           # Dark Purple, Light Purple
+        ('darkorange', 'gold'),              # Dark Orange, Light Yellow/Gold
+        ('teal', 'turquoise'),               # Dark Teal, Light Teal
+        ('mediumvioletred', 'hotpink')       # Dark Pink, Light Pink
+    ]
+    
+    # Define a single color set for average plots
+    single_colors = ['navy', 'darkred', 'darkgreen', 'rebeccapurple', 'darkorange', 'teal', 'mediumvioletred']
+    
+    # TOP ROW: Non-zealot plots
+    
+    # 1. Average Magnetization (top left)
+    for results, label, color in zip(results_list, labels, single_colors):
+        temps = results['temperatures']
+        avg_mag = results['average_magnetizations']
+        avg_mag_err = results['average_magnetizations_std_errors']
+        
+        if not np.isnan(avg_mag).all():
+            axes[0, 0].errorbar(temps, avg_mag, yerr=avg_mag_err, 
+                            marker="o", label=label, color=color,
+                            capsize=3, markersize=4)
+    
+    axes[0, 0].set_xlabel("Temperature", fontsize=10)
+    axes[0, 0].set_ylabel("Average Magnetization", fontsize=10)
+    axes[0, 0].set_title("Average Magnetization vs Temperature", fontsize=12)
+    axes[0, 0].grid(True, alpha=0.3)
+    axes[0, 0].legend(fontsize=8)
+    
+    # 2. M+ and M- (top middle)
+    for results, label, (color1, color2) in zip(results_list, labels, colors):
+        temps = results['temperatures']
+        m_plus = results['m_plus_avgs']
+        m_minus = results['m_minus_avgs']
+        m_plus_err = results['m_plus_avgs_std_errors']
+        m_minus_err = results['m_minus_avgs_std_errors']
+        
+        if not np.isnan(m_plus).all():
+            axes[0, 1].errorbar(temps, m_plus, yerr=m_plus_err, 
+                            marker="o", label=f"{label} ($m_+$)", color=color1,
+                            capsize=3, markersize=4)
+        if not np.isnan(m_minus).all():
+            axes[0, 1].errorbar(temps, m_minus, yerr=m_minus_err, 
+                            marker="s", label=f"{label} ($m_-$)", color=color2,
+                            capsize=3, markersize=4)
+    
+    axes[0, 1].set_xlabel("Temperature", fontsize=10)
+    axes[0, 1].set_ylabel("Average Magnetization", fontsize=10)
+    axes[0, 1].set_title("$m_+$ and $m_-$ vs Temperature", fontsize=12)
+    axes[0, 1].grid(True, alpha=0.3)
+    axes[0, 1].legend(fontsize=8)
+    
+    # 3. g+ and g- (top right)
+    for results, label, (color1, color2) in zip(results_list, labels, colors):
+        temps = results['temperatures']
+        g_plus = results['g_plus_list']
+        g_minus = results['g_minus_list']
+        g_plus_err = results['g_plus_std_errors']
+        g_minus_err = results['g_minus_std_errors']
+        
+        if not np.isnan(g_plus).all():
+            axes[0, 2].errorbar(temps, g_plus, yerr=g_plus_err, 
+                          marker="o", label=f"{label} ($g_+$)", color=color1,
+                          capsize=3, markersize=4)
+        if not np.isnan(g_minus).all():
+            axes[0, 2].errorbar(temps, g_minus, yerr=g_minus_err, 
+                          marker="s", label=f"{label} ($g_-$)", color=color2,
+                          capsize=3, markersize=4)
+    
+    axes[0, 2].set_xlabel("Temperature", fontsize=10)
+    axes[0, 2].set_ylabel("Fraction of Runs", fontsize=10)
+    axes[0, 2].set_title("$g_+$ and $g_-$ vs Temperature", fontsize=12)
+    axes[0, 2].grid(True, alpha=0.3)
+    axes[0, 2].legend(fontsize=8)
+    
+    # BOTTOM ROW: Zealot plots
+    
+    # 4. Average Zealot Spins (bottom left)
+    for results, label, color in zip(results_list, labels, single_colors):
+        temps = results['temperatures']
+        avg_zealot = results['average_zealot_spins']
+        avg_zealot_err = results['average_zealot_spins_std_errors']
+        
+        if not np.isnan(avg_zealot).all():
+            axes[1, 0].errorbar(temps, avg_zealot, yerr=avg_zealot_err, 
+                          marker="o", label=label, color=color,
+                          capsize=3, markersize=4)
+    
+    axes[1, 0].set_xlabel("Temperature", fontsize=10)
+    axes[1, 0].set_ylabel("Average Zealot Spin", fontsize=10)
+    axes[1, 0].set_title("Average Zealot Spin vs Temperature", fontsize=12)
+    axes[1, 0].grid(True, alpha=0.3)
+    axes[1, 0].legend(fontsize=8)
+    
+    # 5. z+ and z- (bottom middle)
+    for results, label, (color1, color2) in zip(results_list, labels, colors):
+        temps = results['temperatures']
+        z_plus = results['z_plus_avgs']
+        z_minus = results['z_minus_avgs']
+        z_plus_err = results['z_plus_avgs_std_errors']
+        z_minus_err = results['z_minus_avgs_std_errors']
+        
+        if not np.isnan(z_plus).all():
+            axes[1, 1].errorbar(temps, z_plus, yerr=z_plus_err, 
+                          marker="o", label=f"{label} ($z_+$)", color=color1,
+                          capsize=3, markersize=4)
+        if not np.isnan(z_minus).all():
+            axes[1, 1].errorbar(temps, z_minus, yerr=z_minus_err, 
+                          marker="s", label=f"{label} ($z_-$)", color=color2,
+                          capsize=3, markersize=4)
+    
+    axes[1, 1].set_xlabel("Temperature", fontsize=10)
+    axes[1, 1].set_ylabel("Average Zealot Spin", fontsize=10)
+    axes[1, 1].set_title("$z_+$ and $z_-$ vs Temperature", fontsize=12)
+    axes[1, 1].grid(True, alpha=0.3)
+    axes[1, 1].legend(fontsize=8)
+    
+    # 6. f+ and f- (bottom right)
+    for results, label, (color1, color2) in zip(results_list, labels, colors):
+        temps = results['temperatures']
+        f_plus = results['f_plus_list']
+        f_minus = results['f_minus_list']
+        f_plus_err = results['f_plus_std_errors']
+        f_minus_err = results['f_minus_std_errors']
+        
+        if not np.isnan(f_plus).all():
+            axes[1, 2].errorbar(temps, f_plus, yerr=f_plus_err, 
+                          marker="o", label=f"{label} ($f_+$)", color=color1,
+                          capsize=3, markersize=4)
+        if not np.isnan(f_minus).all():
+            axes[1, 2].errorbar(temps, f_minus, yerr=f_minus_err, 
+                          marker="s", label=f"{label} ($f_-$)", color=color2,
+                          capsize=3, markersize=4)
+    
+    axes[1, 2].set_xlabel("Temperature", fontsize=10)
+    axes[1, 2].set_ylabel("Fraction of Runs", fontsize=10)
+    axes[1, 2].set_title("$f_+$ and $f_-$ vs Temperature", fontsize=12)
+    axes[1, 2].grid(True, alpha=0.3)
+    axes[1, 2].legend(fontsize=8)
+    
+    # Adjust layout to prevent overlap
+    plt.tight_layout()
+    
+    # Save the figure if save_path is provided
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    
+    # Show the plot
+    plt.show()
+    
+    return fig, axes
 
 #new paths
 #ratio
@@ -491,9 +660,10 @@ results_Js_100 = load_processed_results(path_Js_100)
 combined_results_Js_101 = load_processed_results(path_Js_101)
 combined_results_Js_102 = load_and_replace_results(path_Js_102, crit_Js_path_102)
 combined_results_Js_105 = load_processed_results(path_Js_105)
-
+ 
 
 labels_ratio = [r"48% up", r"48.5% up", r"49% up", r"49.5% up", r"50% up", r"51% up"]
+results_ratio = [combined_results_ratio_480, combined_results_ratio_485, combined_results_ratio_490, combined_results_ratio_495, combined_results_ratio_500, combined_results_ratio_510]
 plot_all_combined_results([combined_results_ratio_480, combined_results_ratio_485, combined_results_ratio_490, combined_results_ratio_495, combined_results_ratio_500, combined_results_ratio_510], labels_ratio)
 
 labels_hs = ["zealot field = 1.1N", "zealot field = N", "zealot field = 0.9N", "zealot field = 0.85N", "zealot field = 0.8N", "zealot field = 0.75N", "zealot field = 0.7N"]
@@ -506,3 +676,5 @@ labels_Js = ["J_s = 0.95", "J_s = 0.99", "J_s = 1", "J_s = 1.01", "J_s = 1.02", 
 plot_all_combined_results([results_Js_095, results_Js_099, results_Js_100, combined_results_Js_101, combined_results_Js_102, combined_results_Js_105], labels_Js)
 
 
+
+fig, axes = plot_combined_results_subplot(results_ratio, labels_ratio, save_path="combined_plots.png")

@@ -151,19 +151,20 @@ def run_individual_simulation(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_
                    
     return temp, all_magnetizations, zealot_array
   
-def run_parallel_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, initial_up_ratio=0.5):
+def run_serial_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, initial_up_ratio=0.5):
     """
-    Run simulations for all temperature-seed combinations in parallel.
+    Run simulations for all temperature-seed combinations in series (not parallel).
     """
     combinations = list(itertools.product(temperatures, seeds))
+    results = []
     
-    # Run all combinations in parallel
-    results = Parallel(n_jobs=-1)(
-        delayed(run_individual_simulation)(
+    # Run all combinations in series
+    for temp, seed in tqdm(combinations, desc="Running simulations"):
+        result = run_individual_simulation(
             seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin,
             num_iterations, number_of_MC_steps, initial_up_ratio
-        ) for temp, seed in tqdm(combinations, desc="Running simulations")
-    )
+        )
+        results.append(result)
     
     # Organize results by temperature
     results_dict = {}
@@ -173,7 +174,7 @@ def run_parallel_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s,
         results_dict[temp]['magnetizations'].append(magnetizations)
         results_dict[temp]['zealot_spins'].append(zealot_spins)
     
-    return results_dict 
+    return results_dict
 
 def post_process_combined_results(all_magnetizations, all_zealot_spins, burn_in_steps, time_average_proportion):
     # Convert inputs to numpy arrays if they aren't already
@@ -535,7 +536,7 @@ initial_up_ratio = 0.5
 
 start = time.time()
 # Run the simulation for all temperatures in parallel
-simulation_results = run_parallel_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, initial_up_ratio)
+simulation_results = run_serial_simulations(temperatures, seeds, L, N, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps, initial_up_ratio)
 end = time.time()
 length = end - start
 print("It took", length, "seconds!")

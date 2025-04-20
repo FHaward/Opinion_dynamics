@@ -102,13 +102,13 @@ N = L**2
 zealot_spin = -1
 k_B = 1
 num_iterations = N*100  # Total number of iterations
-J_b = 1.0/(N-1)
-J_s = 1.01
+J_b = 1/(N-1)
+J_s = 1.05
 h_b = -1
 h_s = N
 number_of_MC_steps = 2
 seed = 13
-temp = 0.98286
+temp = 0.84286
 
 # Run the simulation
 magnetization, lattice_snapshots = run_simulation_with_snapshots(seed, L, N, temp, k_B, J_b, h_b, h_s, J_s, zealot_spin, num_iterations, number_of_MC_steps)
@@ -152,10 +152,3 @@ plt.show()
 
 
 
-import numpy as np
-
-ratios = np.linspace(0.4, 0.6, 50).tolist()  # Range of initial up ratios
-
-filtered_ratios = [r for r in ratios if 0.475 <= r <= 0.525]
-
-print(filtered_ratios)
