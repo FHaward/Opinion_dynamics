@@ -602,7 +602,7 @@ def plot_combined_results_subplot_report(results_list, labels, save_path=None, f
             handles_col2.append(line)
             labels_col2.append(f"{label} $g_+$")
     
-    ax02.set_ylabel("Fraction of Runs", fontsize=LABEL_SIZE)
+    ax02.set_ylabel("Positive Fraction", fontsize=LABEL_SIZE)
     ax02.grid(True, alpha=0.3, linewidth=1.5)
     ax02.tick_params(axis='both', which='major', labelsize=TICK_SIZE, width=2, length=8)
     for spine in ax02.spines.values():
@@ -671,7 +671,7 @@ def plot_combined_results_subplot_report(results_list, labels, save_path=None, f
                           capsize=5, markersize=10, linewidth=3, elinewidth=2)
     
     ax12.set_xlabel("Temperature", fontsize=LABEL_SIZE)
-    ax12.set_ylabel("Fraction of Runs", fontsize=LABEL_SIZE)
+    ax12.set_ylabel("Positive Fraction", fontsize=LABEL_SIZE)
     ax12.grid(True, alpha=0.3, linewidth=1.5)
     ax12.tick_params(axis='both', which='major', labelsize=TICK_SIZE, width=2, length=8)
     for spine in ax12.spines.values():
@@ -683,7 +683,9 @@ def plot_combined_results_subplot_report(results_list, labels, save_path=None, f
     # Adjust subplots to make much more room for legends
     plt.subplots_adjust(bottom=subplot_adjustments['bottom'], 
                         wspace=subplot_adjustments['wspace'], 
-                        hspace=subplot_adjustments['hspace'])
+                        hspace=subplot_adjustments['hspace'],
+                        top=subplot_adjustments['top'])
+
     
     # Adjust position of the third column to create more space for axis labels
     for i in range(2):  # For both rows
@@ -766,6 +768,7 @@ path_hs_075 = r"C:\Users\frase\Documents\Durham\4th Year\1Project\Results_2\simu
 path_hs_070 = r"C:\Users\frase\Documents\Durham\4th Year\1Project\Results_2\simulation_results\nearest_neighbour\h_s\h_s_7000.0\20250414_182602_ratio_50.0_J_s_1.01\numerical_results.json"
 path_hs_065 = r"C:\Users\frase\Documents\Durham\4th Year\1Project\Results_2\simulation_results\nearest_neighbour\h_s\h_s_6500.0\20250416_002558_ratio_50.0_J_s_1.01\numerical_results.json"
 path_hs_060 = r"C:\Users\frase\Documents\Durham\4th Year\1Project\Results_2\simulation_results\nearest_neighbour\h_s\h_s_6000.0\20250414_205538_ratio_50.0_J_s_1.01\numerical_results.json"
+path_hs_0625= r"C:\Users\frase\Documents\Durham\4th Year\1Project\Results_2\simulation_results\nearest_neighbour\h_s\h_s_6250.0\20250422_175142_ratio_50.0_J_s_1.01\numerical_results.json"
 
 #J_s
 path_Js_105 = r"C:\Users\frase\Documents\Durham\4th Year\1Project\Results_2\simulation_results\nearest_neighbour\h_s\h_s_10000\20250415_195213_ratio_50.0_J_s_1.05\numerical_results.json"
@@ -797,6 +800,7 @@ results_hs_075 = load_processed_results(path_hs_075)
 results_hs_070 = load_processed_results(path_hs_070)
 results_hs_065 = load_processed_results(path_hs_065)
 results_hs_060 = load_processed_results(path_hs_060)
+results_hs_0625 = load_processed_results(path_hs_0625)
 
 #Js results
 results_Js_105 = load_and_replace_results(path_Js_105, crit_path_Js_105)
@@ -806,10 +810,8 @@ results_Js_099 = load_processed_results(path_Js_099)
 results_Js_095 = load_processed_results(path_Js_095)
 
 
-labels_ratio =  [r"=35%", r"r=40%", r"r=42.5%", r"r=45%", r"r=50%", r"r=55%"]
-
 #Ratio plotting
-labels_ratio =  [r"$r_+$=35", r"$r_+$=40%", r"$r_+$=42.5%", r"$r_+$=45%", r"$r_+$=50%", r"$r_+$=55%"]
+labels_ratio =  [r"$r_+$=35%", r"$r_+$=40%", r"$r_+$=42.5%", r"$r_+$=45%", r"$r_+$=50%", r"$r_+$=55%"]
 results_ratio = [results_ratio_35, results_ratio_40, results_ratio_425, results_ratio_45, results_ratio_50, results_ratio_55]
 fig, axes = plot_combined_results_subplot_report(
     results_ratio, 
@@ -829,14 +831,18 @@ fig, axes = plot_combined_results_subplot_report(
     subplot_adjustments={
         'bottom': 0.39,   
         'wspace': 0.12,  
-        'hspace': 0.15    
+        'hspace': 0.15, 
+        'top': 0.95  
     }
 )
 
 
+["$h_s$=1.1N", "$h_s$=N", "$h_s$=0.8N", "$h_s$=0.7N","$h_s$=0.625N", "$h_s$=0.6N"]
+[results_hs_110, results_ratio_50, results_hs_080, results_hs_070, results_hs_0625, results_hs_060]
+
 #hs plotting
-labels_hs = ["$h_s$=1.1N", "$h_s$=N", "$h_s$=0.8N", "$h_s$=0.7N","$h_s$=0.65N", "$h_s$=0.6N"]
-results_hs = [results_hs_110, results_ratio_50, results_hs_080, results_hs_070, results_hs_065, results_hs_060]
+labels_hs = ["$h_s$=0.6N", "$h_s$=0.625N", "$h_s$=0.7N", "$h_s$=0.8N", "$h_s$=N", "$h_s$=1.1N"]
+results_hs = [results_hs_060, results_hs_0625, results_hs_070, results_hs_080, results_ratio_50, results_hs_110]
 fig, axes = plot_combined_results_subplot_report(
     results_hs, 
     labels_hs, 
@@ -855,14 +861,15 @@ fig, axes = plot_combined_results_subplot_report(
     subplot_adjustments={
         'bottom': 0.39,   
         'wspace': 0.12,  
-        'hspace': 0.15    
+        'hspace': 0.15,
+        'top': 0.95      
     }
 )
 
 
 #JS plotting
-labels_Js = ["$J_s$=1.05", "$J_s$=1.02", "$J_s$=1.01", "$J_s$=1", "$J_s$=0.99", "$J_s$=0.95"]
-results_Js = [results_Js_105, results_Js_102, results_ratio_50, results_Js_100, results_Js_099, results_Js_095]
+labels_Js = ["$J_s$=0.95", "$J_s$=0.99", "$J_s$=1.00", "$J_s$=1.01", "$J_s$=1.02", "$J_s$=1.05"]
+results_Js = [results_Js_095, results_Js_099, results_Js_100, results_ratio_50, results_Js_102, results_Js_105]
 fig, axes = plot_combined_results_subplot_report(
     results_Js, 
     labels_Js, 
@@ -881,6 +888,7 @@ fig, axes = plot_combined_results_subplot_report(
     subplot_adjustments={
         'bottom': 0.36,   
         'wspace': 0.12,  
-        'hspace': 0.15    
+        'hspace': 0.15,
+        'top': 0.95      
     }
 )

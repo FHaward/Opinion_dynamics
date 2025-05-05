@@ -572,6 +572,673 @@ def plot_combined_results_subplot(results_list, labels, save_path=None, figsize=
     
     return fig, axes
 
+def plot_combined_results_subplot_report(results_list, labels, save_path=None, figsize=(24, 16),
+                                         label_positions=None, legend_column_positions=None, 
+                                         legend_y_positions=None, subplot_adjustments=None):
+    """
+    Generate a 2x3 subplot layout with non-zealot plots on the top row
+    and zealot plots on the bottom row, styled for reports with larger text.
+    Plots only g+ and f+ (not g- and f-).
+    
+    Features:
+    - Shared x-axes between top and bottom rows
+    - Shared y-axes between first two plots in each row (magnetization plots)
+    - Plot labels (a-f) positioned in bottom right (except c in top left)
+    - Dashed horizontal lines at y=0 for magnetization plots
+    - No titles, maximizing plot area
+    - Larger text and numbers
+    - Two-column legends with improved positioning
+    
+    Args:
+        results_list: List of loaded results dictionaries from load_processed_results
+        labels: List of labels for each dataset
+        save_path: Optional path to save the plot
+        figsize: Size of the figure (width, height) in inches
+        label_positions: List of (x, y) tuples for positioning plot labels (a-f)
+                         Default positions have a-b-d-e-f in bottom right, c in top left
+        legend_column_positions: List of x positions for the three legend columns
+                                Default: [0.24, 0.5, 0.79] (centers of columns)
+        legend_y_positions: List of y positions for the three legends
+                           Default: [0.18, 0.12, 0.18]
+        subplot_adjustments: Dictionary with subplot adjustment parameters
+                            Default: {'bottom': 0.36, 'wspace': 0.12, 'hspace': 0.15}
+    """
+    # Set default values for new parameters if not provided
+    if label_positions is None:
+        label_positions = [
+            (0.95, 0.05),  # a - bottom right
+            (0.95, 0.1),   # b - bottom right
+            (0.03, 0.92),  # c - top left (special case)
+            (0.95, 0.05),  # d - bottom right
+            (0.95, 0.1),   # e - bottom right
+            (0.95, 0.15),  # f - bottom right
+        ]
+    
+    if legend_column_positions is None:
+        legend_column_positions = [0.24, 0.5, 0.79]  # Centers of columns
+    
+    if legend_y_positions is None:
+        legend_y_positions = [0.18, 0.12, 0.18]  # Y positions for each legend
+    
+    if subplot_adjustments is None:
+        subplot_adjustments = {
+            'bottom': 0.36,
+            'wspace': 0.12,
+            'hspace': 0.15
+        }
+    
+    # Create a figure with increased width
+    fig = plt.figure(figsize=figsize)
+    
+    # Create subplot grid with shared axes and more horizontal space
+    gs = fig.add_gridspec(2, 3, hspace=0.15, wspace=0.20)
+    
+    # Create axes with shared x and y axes where appropriate
+    # Top row
+    ax00 = fig.add_subplot(gs[0, 0])  # top left
+    ax01 = fig.add_subplot(gs[0, 1], sharey=ax00)  # top middle - shares y with top left
+    ax02 = fig.add_subplot(gs[0, 2])  # top right
+    
+    # Bottom row - share x-axes with top row
+    ax10 = fig.add_subplot(gs[1, 0], sharex=ax00)  # bottom left - shares x with top left
+    ax11 = fig.add_subplot(gs[1, 1], sharex=ax01, sharey=ax10)  # bottom middle - shares x with top middle, y with bottom left
+    ax12 = fig.add_subplot(gs[1, 2], sharex=ax02)  # bottom right - shares x with top right
+    
+    # Create a list of all axes for easier iteration
+    axes = [[ax00, ax01, ax02], [ax10, ax11, ax12]]
+    
+    # Define color pairs for each dataset
+    colors = [
+        ('navy', 'cornflowerblue'),          # Dark Blue, Light Blue
+        ('darkred', 'lightcoral'),           # Dark Red, Light Red
+        ('darkgreen', 'yellowgreen'),        # Dark Green, Light Green
+        ('rebeccapurple', 'plum'),           # Dark Purple, Light Purple
+        ('darkorange', 'gold'),              # Dark Orange, Light Yellow/Gold
+        ('teal', 'turquoise'),               # Dark Teal, Light Teal
+        ('mediumvioletred', 'hotpink')       # Dark Pink, Light Pink
+    ]
+    
+    # Define a single color set for average plots
+    single_colors = ['navy', 'darkred', 'darkgreen', 'rebeccapurple', 'darkorange', 'teal', 'mediumvioletred']
+    
+    # Set larger font sizes
+    LABEL_SIZE = 26
+    TICK_SIZE = 24
+    LEGEND_SIZE = 24
+    
+    # Create empty lists to store handles and labels for shared legends
+    handles_col0 = []
+    labels_col0 = []
+    handles_col1 = []
+    labels_col1 = []
+    handles_col2 = []
+    labels_col2 = []
+    
+    # Add plot labels (a-f) with improved positioning
+    label_texts = ['(a)', '(b)', '(c)', '(d)', '(e)', '(f)']
+    
+    for row in range(2):
+        for col in range(3):
+            idx = row*3 + col
+            pos_x, pos_y = label_positions[idx]
+            
+            # For most labels, use bottom right alignment
+            ha = 'center'
+            va = 'center'
+            
+            axes[row][col].text(pos_x, pos_y, label_texts[idx], 
+                              transform=axes[row][col].transAxes, 
+                              fontsize=LABEL_SIZE+2, fontweight='bold',
+                              ha=ha, va=va)
+    
+    # TOP ROW: Non-zealot plots
+    
+    # 1. Average Magnetization (top left)
+    for results, label, color in zip(results_list, labels, single_colors):
+        temps = results['temperatures']
+        avg_mag = results['average_magnetizations']
+        avg_mag_err = results['average_magnetizations_std_errors']
+        
+        if not np.isnan(avg_mag).all():
+            line = ax00.errorbar(temps, avg_mag, yerr=avg_mag_err, 
+                            marker="o", label=label, color=color,
+                            capsize=5, markersize=10, linewidth=3, elinewidth=2)
+            # Store handles and labels for shared legend
+            handles_col0.append(line)
+            labels_col0.append(label)
+    
+    # Add dashed horizontal line at y=0
+    ax00.axhline(y=0, color='gray', linestyle='--', linewidth=1.5, alpha=0.7)
+    
+    ax00.set_ylabel("Average Magnetization", fontsize=LABEL_SIZE)
+    ax00.grid(True, alpha=0.3, linewidth=1.5)
+    ax00.tick_params(axis='both', which='major', labelsize=TICK_SIZE, width=2, length=8)
+    for spine in ax00.spines.values():
+        spine.set_linewidth(2)
+    
+    # 2. M+ and M- (top middle)
+    for i, (results, label, (color1, color2)) in enumerate(zip(results_list, labels, colors)):
+        temps = results['temperatures']
+        m_plus = results['m_plus_avgs']
+        m_minus = results['m_minus_avgs']
+        m_plus_err = results['m_plus_avgs_std_errors']
+        m_minus_err = results['m_minus_avgs_std_errors']
+        
+        if not np.isnan(m_plus).all():
+            line1 = ax01.errorbar(temps, m_plus, yerr=m_plus_err, 
+                            marker="o", label=f"{label} $m_+$", color=color1,
+                            capsize=5, markersize=10, linewidth=3, elinewidth=2)
+            handles_col1.append(line1)
+            labels_col1.append(f"{label} $m_+$")
+            
+        if not np.isnan(m_minus).all():
+            line2 = ax01.errorbar(temps, m_minus, yerr=m_minus_err, 
+                            marker="s", label=f"{label} $m_-$", color=color2,
+                            capsize=5, markersize=10, linewidth=3, elinewidth=2)
+            handles_col1.append(line2)
+            labels_col1.append(f"{label} $m_-$")
+    
+    # Add dashed horizontal line at y=0
+    ax01.axhline(y=0, color='gray', linestyle='--', linewidth=1.5, alpha=0.7)
+    
+    ax01.set_ylabel("")  # Hide y-axis label for middle plot since it shares with left plot
+    ax01.grid(True, alpha=0.3, linewidth=1.5)
+    ax01.tick_params(axis='both', which='major', labelsize=TICK_SIZE, width=2, length=8)
+    for spine in ax01.spines.values():
+        spine.set_linewidth(2)
+    
+    # 3. g+ only (top right)
+    for results, label, (color1, _) in zip(results_list, labels, colors):
+        temps = results['temperatures']
+        g_plus = results['g_plus_list']
+        g_plus_err = results['g_plus_std_errors']
+        
+        if not np.isnan(g_plus).all():
+            line = ax02.errorbar(temps, g_plus, yerr=g_plus_err, 
+                          marker="o", label=f"{label} $g_+$", color=color1,
+                          capsize=5, markersize=10, linewidth=3, elinewidth=2)
+            handles_col2.append(line)
+            labels_col2.append(f"{label} $g_+$")
+    
+    ax02.set_ylabel("Positive Fraction", fontsize=LABEL_SIZE)
+    ax02.grid(True, alpha=0.3, linewidth=1.5)
+    ax02.tick_params(axis='both', which='major', labelsize=TICK_SIZE, width=2, length=8)
+    for spine in ax02.spines.values():
+        spine.set_linewidth(2)
+    
+    # BOTTOM ROW: Zealot plots
+    
+    # 4. Average Zealot Spins (bottom left)
+    for results, label, color in zip(results_list, labels, single_colors):
+        temps = results['temperatures']
+        avg_zealot = results['average_zealot_spins']
+        avg_zealot_err = results['average_zealot_spins_std_errors']
+        
+        if not np.isnan(avg_zealot).all():
+            ax10.errorbar(temps, avg_zealot, yerr=avg_zealot_err, 
+                          marker="o", color=color,  # No label for zealot plots
+                          capsize=5, markersize=10, linewidth=3, elinewidth=2)
+    
+    # Add dashed horizontal line at y=0
+    ax10.axhline(y=0, color='gray', linestyle='--', linewidth=1.5, alpha=0.7)
+    
+    ax10.set_xlabel("Temperature", fontsize=LABEL_SIZE)
+    ax10.set_ylabel("Average Zealot Spin", fontsize=LABEL_SIZE)
+    ax10.grid(True, alpha=0.3, linewidth=1.5)
+    ax10.tick_params(axis='both', which='major', labelsize=TICK_SIZE, width=2, length=8)
+    for spine in ax10.spines.values():
+        spine.set_linewidth(2)
+    
+    # 5. z+ and z- (bottom middle)
+    for i, (results, label, (color1, color2)) in enumerate(zip(results_list, labels, colors)):
+        temps = results['temperatures']
+        z_plus = results['z_plus_avgs']
+        z_minus = results['z_minus_avgs']
+        z_plus_err = results['z_plus_avgs_std_errors']
+        z_minus_err = results['z_minus_avgs_std_errors']
+        
+        if not np.isnan(z_plus).all():
+            ax11.errorbar(temps, z_plus, yerr=z_plus_err, 
+                          marker="o", color=color1,  # No label for zealot plots
+                          capsize=5, markersize=10, linewidth=3, elinewidth=2)
+            
+        if not np.isnan(z_minus).all():
+            ax11.errorbar(temps, z_minus, yerr=z_minus_err, 
+                          marker="s", color=color2,  # No label for zealot plots
+                          capsize=5, markersize=10, linewidth=3, elinewidth=2)
+    
+    # Add dashed horizontal line at y=0
+    ax11.axhline(y=0, color='gray', linestyle='--', linewidth=1.5, alpha=0.7)
+    
+    ax11.set_xlabel("Temperature", fontsize=LABEL_SIZE)
+    ax11.set_ylabel("")  # Hide y-axis label for middle plot since it shares with left plot
+    ax11.grid(True, alpha=0.3, linewidth=1.5)
+    ax11.tick_params(axis='both', which='major', labelsize=TICK_SIZE, width=2, length=8)
+    for spine in ax11.spines.values():
+        spine.set_linewidth(2)
+    
+    # 6. f+ only (bottom right)
+    for results, label, (color1, _) in zip(results_list, labels, colors):
+        temps = results['temperatures']
+        f_plus = results['f_plus_list']
+        f_plus_err = results['f_plus_std_errors']
+        
+        if not np.isnan(f_plus).all():
+            ax12.errorbar(temps, f_plus, yerr=f_plus_err, 
+                          marker="o", color=color1,  # No label for zealot plots
+                          capsize=5, markersize=10, linewidth=3, elinewidth=2)
+    
+    ax12.set_xlabel("Temperature", fontsize=LABEL_SIZE)
+    ax12.set_ylabel("Positive Fraction", fontsize=LABEL_SIZE)
+    ax12.grid(True, alpha=0.3, linewidth=1.5)
+    ax12.tick_params(axis='both', which='major', labelsize=TICK_SIZE, width=2, length=8)
+    for spine in ax12.spines.values():
+        spine.set_linewidth(2)
+    
+    # Adjust layout with shared axes and more horizontal space
+    plt.tight_layout()
+    
+    # Adjust subplots to make much more room for legends
+    plt.subplots_adjust(bottom=subplot_adjustments['bottom'], 
+                        wspace=subplot_adjustments['wspace'], 
+                        hspace=subplot_adjustments['hspace'],
+                        top=subplot_adjustments['top'])
+
+    
+    # Adjust position of the third column to create more space for axis labels
+    for i in range(2):  # For both rows
+        pos = axes[i][2].get_position()
+        # Move the third column plots slightly to the right
+        # Increase the x0 value to add more space
+        axes[i][2].set_position([pos.x0 + 0.02, pos.y0, pos.width, pos.height])
+        
+    # Add legends for each column, properly centered
+    # First column legend (left)
+    leg1 = fig.legend(handles_col0, labels_col0, loc='lower center', 
+               bbox_to_anchor=(legend_column_positions[0], legend_y_positions[0]), fontsize=LEGEND_SIZE,
+               ncol=min(2, len(labels_col0)), frameon=True)
+    leg1.get_frame().set_linewidth(2)
+    
+    # Second column legend (middle)
+    # Group all m+ entries first, then all m- entries
+    m_plus_handles = []
+    m_plus_labels = []
+    m_minus_handles = []
+    m_minus_labels = []
+    
+    # Split into two groups for clearer organization
+    for i in range(0, len(handles_col1), 2):
+        if i < len(handles_col1):
+            m_plus_handles.append(handles_col1[i])
+            m_plus_labels.append(labels_col1[i])
+        if i+1 < len(handles_col1):
+            m_minus_handles.append(handles_col1[i+1])
+            m_minus_labels.append(labels_col1[i+1])
+    
+    combined_handles = m_plus_handles + m_minus_handles
+    combined_labels = m_plus_labels + m_minus_labels
+    
+    # Calculate number of columns for legend - changed to 2 columns max
+    n_datasets = len(labels)
+    n_cols = min(n_datasets, 2)  # Maximum 2 columns for clarity
+    
+    leg2 = fig.legend(combined_handles, combined_labels, loc='lower center', 
+               bbox_to_anchor=(legend_column_positions[1], legend_y_positions[1]), fontsize=LEGEND_SIZE,
+               ncol=n_cols, frameon=True)
+    leg2.get_frame().set_linewidth(2)
+    
+    # Third column legend (right)
+    leg3 = fig.legend(handles_col2, labels_col2, loc='lower center', 
+               bbox_to_anchor=(legend_column_positions[2], legend_y_positions[2]), fontsize=LEGEND_SIZE,
+               ncol=min(2, len(labels_col2)), frameon=True)
+    leg3.get_frame().set_linewidth(2)
+    
+    # Save the figure if save_path is provided
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    
+    # Show the plot
+    plt.show()
+    
+    return fig, axes
+
+def plot_combined_results_subplot_report_2(results_list, labels, save_path=None, figsize=(24, 16),
+                                         label_positions=None, legend_column_positions=None, 
+                                         legend_y_positions=None, subplot_adjustments=None):
+    """
+    Generate a 2x3 subplot layout with non-zealot plots on the top row
+    and zealot plots on the bottom row, styled for reports with larger text.
+    Plots only g+ and f+ (not g- and f-).
+    
+    Features:
+    - Shared x-axes between top and bottom rows
+    - Independent y-axes for all plots for maximum detail
+    - Plot labels (a-f) positioned in bottom right (except c in top left)
+    - Dashed horizontal lines at y=0 for magnetization plots
+    - No titles, maximizing plot area
+    - Larger text and numbers
+    - Two-column legends with improved positioning
+    - Adjusted column positions to make room for y-axis labels
+    
+    Args:
+        results_list: List of loaded results dictionaries from load_processed_results
+        labels: List of labels for each dataset
+        save_path: Optional path to save the plot
+        figsize: Size of the figure (width, height) in inches
+        label_positions: List of (x, y) tuples for positioning plot labels (a-f)
+                         Default positions have a-b-d-e-f in bottom right, c in top left
+        legend_column_positions: List of x positions for the three legend columns
+                                Default: [0.24, 0.5, 0.79] (centers of columns)
+        legend_y_positions: List of y positions for the three legends
+                           Default: [0.18, 0.12, 0.18]
+        subplot_adjustments: Dictionary with subplot adjustment parameters
+                            Default: {'bottom': 0.36, 'wspace': 0.12, 'hspace': 0.15}
+    """
+    # Set default values for new parameters if not provided
+    if label_positions is None:
+        label_positions = [
+            (0.95, 0.05),  # a - bottom right
+            (0.95, 0.1),   # b - bottom right
+            (0.03, 0.92),  # c - top left (special case)
+            (0.95, 0.05),  # d - bottom right
+            (0.95, 0.1),   # e - bottom right
+            (0.95, 0.15),  # f - bottom right
+        ]
+    
+    if legend_column_positions is None:
+        legend_column_positions = [0.24, 0.5, 0.79]  # Centers of columns
+    
+    if legend_y_positions is None:
+        legend_y_positions = [0.18, 0.12, 0.18]  # Y positions for each legend
+    
+    if subplot_adjustments is None:
+        subplot_adjustments = {
+            'bottom': 0.36,
+            'wspace': 0.12,
+            'hspace': 0.15,
+            'top': 0.95
+        }
+    
+    # Create a figure with increased width
+    fig = plt.figure(figsize=figsize)
+    
+    # Create subplot grid with more horizontal space
+    gs = fig.add_gridspec(2, 3, hspace=0.15, wspace=0.20)
+    
+    # Create axes with shared x axes but independent y axes
+    # Top row
+    ax00 = fig.add_subplot(gs[0, 0])  # top left
+    ax01 = fig.add_subplot(gs[0, 1])  # top middle - NO shared y with top left
+    ax02 = fig.add_subplot(gs[0, 2])  # top right
+    
+    # Bottom row - share x-axes with top row
+    ax10 = fig.add_subplot(gs[1, 0], sharex=ax00)  # bottom left - shares x with top left
+    ax11 = fig.add_subplot(gs[1, 1], sharex=ax01)  # bottom middle - shares x with top middle but NO shared y
+    ax12 = fig.add_subplot(gs[1, 2], sharex=ax02)  # bottom right - shares x with top right
+    
+    # Create a list of all axes for easier iteration
+    axes = [[ax00, ax01, ax02], [ax10, ax11, ax12]]
+    
+    # Define color pairs for each dataset
+    colors = [
+        ('navy', 'cornflowerblue'),          # Dark Blue, Light Blue
+        ('darkred', 'lightcoral'),           # Dark Red, Light Red
+        ('darkgreen', 'yellowgreen'),        # Dark Green, Light Green
+        ('rebeccapurple', 'plum'),           # Dark Purple, Light Purple
+        ('darkorange', 'gold'),              # Dark Orange, Light Yellow/Gold
+        ('teal', 'turquoise'),               # Dark Teal, Light Teal
+        ('mediumvioletred', 'hotpink')       # Dark Pink, Light Pink
+    ]
+    
+    # Define a single color set for average plots
+    single_colors = ['navy', 'darkred', 'darkgreen', 'rebeccapurple', 'darkorange', 'teal', 'mediumvioletred']
+    
+    # Set larger font sizes
+    LABEL_SIZE = 26
+    TICK_SIZE = 24
+    LEGEND_SIZE = 24
+    
+    # Create empty lists to store handles and labels for shared legends
+    handles_col0 = []
+    labels_col0 = []
+    handles_col1 = []
+    labels_col1 = []
+    handles_col2 = []
+    labels_col2 = []
+    
+    # Add plot labels (a-f) with improved positioning
+    label_texts = ['(a)', '(b)', '(c)', '(d)', '(e)', '(f)']
+    
+    for row in range(2):
+        for col in range(3):
+            idx = row*3 + col
+            pos_x, pos_y = label_positions[idx]
+            
+            # For most labels, use bottom right alignment
+            ha = 'center'
+            va = 'center'
+            
+            axes[row][col].text(pos_x, pos_y, label_texts[idx], 
+                              transform=axes[row][col].transAxes, 
+                              fontsize=LABEL_SIZE+2, fontweight='bold',
+                              ha=ha, va=va)
+    
+    # TOP ROW: Non-zealot plots
+    
+    # 1. Average Magnetization (top left)
+    for results, label, color in zip(results_list, labels, single_colors):
+        temps = results['temperatures']
+        avg_mag = results['average_magnetizations']
+        avg_mag_err = results['average_magnetizations_std_errors']
+        
+        if not np.isnan(avg_mag).all():
+            line = ax00.errorbar(temps, avg_mag, yerr=avg_mag_err, 
+                            marker="o", label=label, color=color,
+                            capsize=5, markersize=10, linewidth=3, elinewidth=2)
+            # Store handles and labels for shared legend
+            handles_col0.append(line)
+            labels_col0.append(label)
+    
+    # Add dashed horizontal line at y=0
+    ax00.axhline(y=0, color='gray', linestyle='--', linewidth=1.5, alpha=0.7)
+    
+    ax00.set_ylabel("Average Magnetization", fontsize=LABEL_SIZE)
+    ax00.grid(True, alpha=0.3, linewidth=1.5)
+    ax00.tick_params(axis='both', which='major', labelsize=TICK_SIZE, width=2, length=8)
+    for spine in ax00.spines.values():
+        spine.set_linewidth(2)
+    
+    # 2. M+ and M- (top middle)
+    for i, (results, label, (color1, color2)) in enumerate(zip(results_list, labels, colors)):
+        temps = results['temperatures']
+        m_plus = results['m_plus_avgs']
+        m_minus = results['m_minus_avgs']
+        m_plus_err = results['m_plus_avgs_std_errors']
+        m_minus_err = results['m_minus_avgs_std_errors']
+        
+        if not np.isnan(m_plus).all():
+            line1 = ax01.errorbar(temps, m_plus, yerr=m_plus_err, 
+                            marker="o", label=f"{label} $m_+$", color=color1,
+                            capsize=5, markersize=10, linewidth=3, elinewidth=2)
+            handles_col1.append(line1)
+            labels_col1.append(f"{label} $m_+$")
+            
+        if not np.isnan(m_minus).all():
+            line2 = ax01.errorbar(temps, m_minus, yerr=m_minus_err, 
+                            marker="s", label=f"{label} $m_-$", color=color2,
+                            capsize=5, markersize=10, linewidth=3, elinewidth=2)
+            handles_col1.append(line2)
+            labels_col1.append(f"{label} $m_-$")
+    
+    # Add dashed horizontal line at y=0
+    ax01.axhline(y=0, color='gray', linestyle='--', linewidth=1.5, alpha=0.7)
+    
+    # Add y-axis label for middle plot since it now has its own scale
+    ax01.set_ylabel("Average $m_+$ and $m_-$", fontsize=LABEL_SIZE)
+    ax01.grid(True, alpha=0.3, linewidth=1.5)
+    ax01.tick_params(axis='both', which='major', labelsize=TICK_SIZE, width=2, length=8)
+    for spine in ax01.spines.values():
+        spine.set_linewidth(2)
+    
+    # 3. g+ only (top right)
+    for results, label, (color1, _) in zip(results_list, labels, colors):
+        temps = results['temperatures']
+        g_plus = results['g_plus_list']
+        g_plus_err = results['g_plus_std_errors']
+        
+        if not np.isnan(g_plus).all():
+            line = ax02.errorbar(temps, g_plus, yerr=g_plus_err, 
+                          marker="o", label=f"{label} $g_+$", color=color1,
+                          capsize=5, markersize=10, linewidth=3, elinewidth=2)
+            handles_col2.append(line)
+            labels_col2.append(f"{label} $g_+$")
+    
+    ax02.set_ylabel("Positive Fraction", fontsize=LABEL_SIZE)
+    ax02.grid(True, alpha=0.3, linewidth=1.5)
+    ax02.tick_params(axis='both', which='major', labelsize=TICK_SIZE, width=2, length=8)
+    for spine in ax02.spines.values():
+        spine.set_linewidth(2)
+    
+    # BOTTOM ROW: Zealot plots
+    
+    # 4. Average Zealot Spins (bottom left)
+    for results, label, color in zip(results_list, labels, single_colors):
+        temps = results['temperatures']
+        avg_zealot = results['average_zealot_spins']
+        avg_zealot_err = results['average_zealot_spins_std_errors']
+        
+        if not np.isnan(avg_zealot).all():
+            ax10.errorbar(temps, avg_zealot, yerr=avg_zealot_err, 
+                          marker="o", color=color,  # No label for zealot plots
+                          capsize=5, markersize=10, linewidth=3, elinewidth=2)
+    
+    # Add dashed horizontal line at y=0
+    ax10.axhline(y=0, color='gray', linestyle='--', linewidth=1.5, alpha=0.7)
+    
+    ax10.set_xlabel("Temperature", fontsize=LABEL_SIZE)
+    ax10.set_ylabel("Average Zealot Spin", fontsize=LABEL_SIZE)
+    ax10.grid(True, alpha=0.3, linewidth=1.5)
+    ax10.tick_params(axis='both', which='major', labelsize=TICK_SIZE, width=2, length=8)
+    for spine in ax10.spines.values():
+        spine.set_linewidth(2)
+    
+    # 5. z+ and z- (bottom middle)
+    for i, (results, label, (color1, color2)) in enumerate(zip(results_list, labels, colors)):
+        temps = results['temperatures']
+        z_plus = results['z_plus_avgs']
+        z_minus = results['z_minus_avgs']
+        z_plus_err = results['z_plus_avgs_std_errors']
+        z_minus_err = results['z_minus_avgs_std_errors']
+        
+        if not np.isnan(z_plus).all():
+            ax11.errorbar(temps, z_plus, yerr=z_plus_err, 
+                          marker="o", color=color1,  # No label for zealot plots
+                          capsize=5, markersize=10, linewidth=3, elinewidth=2)
+            
+        if not np.isnan(z_minus).all():
+            ax11.errorbar(temps, z_minus, yerr=z_minus_err, 
+                          marker="s", color=color2,  # No label for zealot plots
+                          capsize=5, markersize=10, linewidth=3, elinewidth=2)
+    
+    # Add dashed horizontal line at y=0
+    ax11.axhline(y=0, color='gray', linestyle='--', linewidth=1.5, alpha=0.7)
+    
+    ax11.set_xlabel("Temperature", fontsize=LABEL_SIZE)
+    # Add y-axis label for middle plot since it now has its own scale
+    ax11.set_ylabel("Average $Z_+$ and $Z_-$", fontsize=LABEL_SIZE)
+    ax11.grid(True, alpha=0.3, linewidth=1.5)
+    ax11.tick_params(axis='both', which='major', labelsize=TICK_SIZE, width=2, length=8)
+    for spine in ax11.spines.values():
+        spine.set_linewidth(2)
+    
+    # 6. f+ only (bottom right)
+    for results, label, (color1, _) in zip(results_list, labels, colors):
+        temps = results['temperatures']
+        f_plus = results['f_plus_list']
+        f_plus_err = results['f_plus_std_errors']
+        
+        if not np.isnan(f_plus).all():
+            ax12.errorbar(temps, f_plus, yerr=f_plus_err, 
+                          marker="o", color=color1,  # No label for zealot plots
+                          capsize=5, markersize=10, linewidth=3, elinewidth=2)
+    
+    ax12.set_xlabel("Temperature", fontsize=LABEL_SIZE)
+    ax12.set_ylabel("Positive Fraction", fontsize=LABEL_SIZE)
+    ax12.grid(True, alpha=0.3, linewidth=1.5)
+    ax12.tick_params(axis='both', which='major', labelsize=TICK_SIZE, width=2, length=8)
+    for spine in ax12.spines.values():
+        spine.set_linewidth(2)
+    
+    # Adjust layout with shared axes and more horizontal space
+    plt.tight_layout()
+    
+    # Adjust subplots to make much more room for legends
+    plt.subplots_adjust(bottom=subplot_adjustments['bottom'], 
+                        wspace=subplot_adjustments['wspace'], 
+                        hspace=subplot_adjustments['hspace'],
+                        top=subplot_adjustments['top'])
+    
+    # Adjust position of the columns to create more space for axis labels
+    for i in range(2):  # For both rows
+        # Adjust second column position to make room for first column y-axis label
+        pos_mid = axes[i][1].get_position()
+        axes[i][1].set_position([pos_mid.x0 + 0.02, pos_mid.y0, pos_mid.width, pos_mid.height])
+        
+        # Adjust third column position to make room for second column y-axis label
+        pos_right = axes[i][2].get_position()
+        axes[i][2].set_position([pos_right.x0 + 0.04, pos_right.y0, pos_right.width, pos_right.height])
+        
+    # Add legends for each column, properly centered
+    # First column legend (left)
+    leg1 = fig.legend(handles_col0, labels_col0, loc='lower center', 
+               bbox_to_anchor=(legend_column_positions[0], legend_y_positions[0]), fontsize=LEGEND_SIZE,
+               ncol=min(2, len(labels_col0)), frameon=True)
+    leg1.get_frame().set_linewidth(2)
+    
+    # Second column legend (middle)
+    # Group all m+ entries first, then all m- entries
+    m_plus_handles = []
+    m_plus_labels = []
+    m_minus_handles = []
+    m_minus_labels = []
+    
+    # Split into two groups for clearer organization
+    for i in range(0, len(handles_col1), 2):
+        if i < len(handles_col1):
+            m_plus_handles.append(handles_col1[i])
+            m_plus_labels.append(labels_col1[i])
+        if i+1 < len(handles_col1):
+            m_minus_handles.append(handles_col1[i+1])
+            m_minus_labels.append(labels_col1[i+1])
+    
+    combined_handles = m_plus_handles + m_minus_handles
+    combined_labels = m_plus_labels + m_minus_labels
+    
+    # Calculate number of columns for legend - changed to 2 columns max
+    n_datasets = len(labels)
+    n_cols = min(n_datasets, 2)  # Maximum 2 columns for clarity
+    
+    leg2 = fig.legend(combined_handles, combined_labels, loc='lower center', 
+               bbox_to_anchor=(legend_column_positions[1], legend_y_positions[1]), fontsize=LEGEND_SIZE,
+               ncol=n_cols, frameon=True)
+    leg2.get_frame().set_linewidth(2)
+    
+    # Third column legend (right)
+    leg3 = fig.legend(handles_col2, labels_col2, loc='lower center', 
+               bbox_to_anchor=(legend_column_positions[2], legend_y_positions[2]), fontsize=LEGEND_SIZE,
+               ncol=min(2, len(labels_col2)), frameon=True)
+    leg3.get_frame().set_linewidth(2)
+    
+    # Save the figure if save_path is provided
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    
+    # Show the plot
+    plt.show()
+    
+    return fig, axes
+
+
 #new paths
 #ratio
 path_ratio_480 = r"C:\Users\frase\Documents\Durham\4th Year\1Project\Results_2\simulation_results\fully_connected\ratio\ratio_48.0\20250320_094156_J_s_1.01_h_s_10000\numerical_results.json"
@@ -662,19 +1329,142 @@ combined_results_Js_102 = load_and_replace_results(path_Js_102, crit_Js_path_102
 combined_results_Js_105 = load_processed_results(path_Js_105)
  
 
-labels_ratio = [r"48% up", r"48.5% up", r"49% up", r"49.5% up", r"50% up", r"51% up"]
+#Ratio plotting
+labels_ratio =  [r"$r_+$=48", r"$r_+$=48.5%", r"$r_+$=49%", r"$r_+$=49.5%", r"$r_+$=50%", r"$r_+$=51%"]
 results_ratio = [combined_results_ratio_480, combined_results_ratio_485, combined_results_ratio_490, combined_results_ratio_495, combined_results_ratio_500, combined_results_ratio_510]
-plot_all_combined_results([combined_results_ratio_480, combined_results_ratio_485, combined_results_ratio_490, combined_results_ratio_495, combined_results_ratio_500, combined_results_ratio_510], labels_ratio)
+fig, axes = plot_combined_results_subplot_report(
+    results_ratio, 
+    labels_ratio, 
+    save_path="fc_ratio_combined_plots.png",
+    figsize=(24, 16),
+    label_positions=[
+        (0.9, 0.1),  # a - bottom right
+        (0.9, 0.1),  # b - bottom right
+        (0.9, 0.1),  # c - bottom right
+        (0.9, 0.1),  # d - bottom right
+        (0.9, 0.1),  # e - bottom right
+        (0.9, 0.1)   # f - bottom right
+    ],
+    legend_column_positions=[0.18, 0.475, 0.79],
+    legend_y_positions=[0.21, 0.12, 0.21],
+    subplot_adjustments={
+        'bottom': 0.39,   
+        'wspace': 0.12,  
+        'hspace': 0.15,
+        'top': 0.95      
+    }
+)
 
-labels_hs = ["zealot field = 1.1N", "zealot field = N", "zealot field = 0.9N", "zealot field = 0.85N", "zealot field = 0.8N", "zealot field = 0.75N", "zealot field = 0.7N"]
-plot_all_combined_results([combined_results_hs_11000, combined_results_ratio_500, combined_results_hs_09000, combined_results_hs_08500, combined_results_hs_08000, combined_results_hs_07500, combined_results_hs_07000], labels_hs)
-
-labels_crititcal_hs = ["0.6", "0.6125", "0.625", "0.6375", "0.65"]
-plot_all_combined_results([results_hs_06000, results_hs_06125, results_hs_06250, results_hs_06375, results_hs_06500], labels_crititcal_hs)
-
-labels_Js = ["J_s = 0.95", "J_s = 0.99", "J_s = 1", "J_s = 1.01", "J_s = 1.02", "J_s = 1.05"]
-plot_all_combined_results([results_Js_095, results_Js_099, results_Js_100, combined_results_Js_101, combined_results_Js_102, combined_results_Js_105], labels_Js)
 
 
+#hs plotting
+labels_hs = ["$h_s$=1.1N", "$h_s$=N", "$h_s$=0.9N", "$h_s$=0.8N","$h_s$=0.7N"]
+results_hs = [combined_results_hs_11000, combined_results_ratio_500, combined_results_hs_09000, combined_results_hs_08000, combined_results_hs_07000]
+fig, axes = plot_combined_results_subplot_report_2(
+    results_hs, 
+    labels_hs, 
+    save_path="fc_hs_combined_plots.png",
+    figsize=(24, 16),
+    label_positions=[
+        (0.9, 0.1),  # a - bottom right
+        (0.9, 0.9),  # b - bottom right
+        (0.1, 0.9),  # c - bottom right
+        (0.9, 0.1),  # d - bottom right
+        (0.9, 0.15),  # e - bottom right
+        (0.9, 0.25)   # f - bottom right
+    ],
+    legend_column_positions=[0.19, 0.48, 0.79],
+    legend_y_positions=[0.18, 0.12, 0.18],
+    subplot_adjustments={
+        'bottom': 0.36,   
+        'wspace': 0.12,  
+        'hspace': 0.15,
+        'top': 0.95    
+    }
+)
 
-fig, axes = plot_combined_results_subplot(results_ratio, labels_ratio, save_path="combined_plots.png")
+#hs limit plotting
+labels_critical_hs = ["$h_s$=0.6N", "$h_s$=0.6125N", "$h_s$=0.625N", "$h_s$=0.6375N","$h_s$=0.65N"]
+results_critical_hs = [results_hs_06000, results_hs_06125, results_hs_06250, results_hs_06375, results_hs_06500]
+fig, axes = plot_combined_results_subplot_report_2(
+    results_critical_hs, 
+    labels_critical_hs, 
+    save_path="fc_hs_critical_combined_plots.png",
+    figsize=(24, 16),
+    label_positions=[
+        (0.9, 0.1),  # a - bottom right
+        (0.9, 0.9),  # b - bottom right
+        (0.1, 0.9),  # c - bottom right
+        (0.9, 0.1),  # d - bottom right
+        (0.9, 0.15),  # e - bottom right
+        (0.9, 0.25)   # f - bottom right
+    ],
+    legend_column_positions=[0.19, 0.48, 0.79],
+    legend_y_positions=[0.21, 0.08, 0.21],
+    subplot_adjustments={
+        'bottom': 0.38,   
+        'wspace': 0.12,  
+        'hspace': 0.15,
+        'top': 0.95    
+    }
+)
+
+
+
+#JS plotting
+labels_Js = ["$J_s$=0.95", "$J_s$=0.99", "$J_s$=1.00", "$J_s$=1.01", "$J_s$=1.02", "$J_s$=1.05"]
+results_Js = [results_Js_095, results_Js_099, results_Js_100, combined_results_Js_101, combined_results_Js_102, combined_results_Js_105]
+fig, axes = plot_combined_results_subplot_report(
+    results_Js, 
+    labels_Js, 
+    save_path="fc_Js_combined_plots.png",
+    figsize=(24, 16),
+    label_positions=[
+        (0.9, 0.1),  # a - bottom right
+        (0.9, 0.1),  # b - bottom right
+        (0.1, 0.9),  # c - bottom right
+        (0.9, 0.1),  # d - bottom right
+        (0.9, 0.1),  # e - bottom right
+        (0.9, 0.1)   # f - bottom right
+    ],
+    legend_column_positions=[0.23, 0.5, 0.79],
+    legend_y_positions=[0.21, 0.12, 0.21],
+    subplot_adjustments={
+        'bottom': 0.39,   
+        'wspace': 0.12,  
+        'hspace': 0.15,
+        'top': 0.95    
+    }
+)
+
+
+
+
+
+
+
+#hs plotting
+labels_hs = ["$h_s$=0.6N", "$h_s$=0.625N", "$h_s$=0.7N", "$h_s$=0.8N", "$h_s$=N", "$h_s$=1.1N"]
+results_hs = [results_hs_06000, results_hs_06250, combined_results_hs_07000, combined_results_hs_08000, combined_results_ratio_500, combined_results_hs_11000]
+fig, axes = plot_combined_results_subplot_report_2(
+    results_hs, 
+    labels_hs, 
+    save_path="fc_hs_new_combined_plots.png",
+    figsize=(24, 16),
+    label_positions=[
+        (0.1, 0.9),  # a - bottom right
+        (0.9, 0.9),  # b - bottom right
+        (0.1, 0.9),  # c - bottom right
+        (0.9, 0.1),  # d - bottom right
+        (0.9, 0.15),  # e - bottom right
+        (0.9, 0.1)   # f - bottom right
+    ],
+    legend_column_positions=[0.19, 0.48, 0.79],
+    legend_y_positions=[0.21, 0.12, 0.21],
+    subplot_adjustments={
+        'bottom': 0.39,   
+        'wspace': 0.12,  
+        'hspace': 0.15,
+        'top': 0.95    
+    }
+)

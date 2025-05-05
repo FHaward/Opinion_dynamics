@@ -130,14 +130,14 @@ L = 100
 N = L**2
 zealot_spin = 1
 k_B = 1
-num_iterations = N*500  # Total number of iterations
+num_iterations = N*200  # Total number of iterations
 J_b = 1.0/4
 J_s = 1.00
 h_b = -1.0
 h_s = N
 number_of_MC_steps = 2
-seed = 10
-temp = 0.5
+seed = 5
+temp = 0.1
 
 # Run the simulation
 lookup_table = create_lookup_table(temp, k_B, J_b, h_b, h_s, J_s,)

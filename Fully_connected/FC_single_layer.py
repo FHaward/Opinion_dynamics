@@ -559,3 +559,17 @@ temperatures
 
 
 
+
+
+initial_up_ratio=0.50
+p_up = initial_up_ratio
+p_down = 1 - initial_up_ratio
+results = []
+seeds = range(1, 11)
+for seed in seeds:
+    np.random.seed(seed)
+    lattice = np.random.choice([-1, 1], size=(L, L), p=[p_down, p_up])
+    magnetization = np.sum(lattice) / N
+    results.append(magnetization)
+    
+results

@@ -225,7 +225,7 @@ print(T_values[first_positive_index], m_minus_mf[first_positive_index])
 
 
 
-plt.figure(figsize=(8, 5))
+plt.figure(figsize=(7, 5))
 
 # Define high-contrast colors
 color_plus = 'blue'        # errorbar: dark
@@ -237,30 +237,219 @@ color_mf_minus = 'cyan'
 if not np.isnan(m_plus).all():
     plt.errorbar(temps, m_plus, yerr=m_plus_err, 
                  marker="o", label=r"$m_+$",
-                 capsize=5, markersize=5, color=color_plus, zorder=1, linewidth=3)
+                 capsize=5, markersize=5, color=color_plus, zorder=1, linewidth=5)
 if not np.isnan(m_minus).all():
     plt.errorbar(temps, m_minus, yerr=m_minus_err, 
                  marker="s", label=r"$m_-$",
-                 capsize=5, markersize=5, color=color_minus, zorder=1, linewidth=3)
+                 capsize=5, markersize=5, color=color_minus, zorder=1, linewidth=5)
 
 # Plot dashed lines with higher zorder (on top)
 plt.plot(T_values, m_plus_mf, label=r'$m>0$ mean field',
-         linestyle=(0, (4, 4)), color=color_mf_plus, zorder=2, linewidth=2.5)
+         linestyle=(0, (4, 2)), color=color_mf_plus, zorder=2, linewidth=3)
 plt.plot(T_values[:first_positive_index], m_minus_mf[:first_positive_index],
-         label=r'$m<0$ mean field', linestyle=(0, (4, 4)), color=color_mf_minus, zorder=2, linewidth=2.5)
+         label=r'$m<0$ mean field', linestyle=(0, (4, 2)), color=color_mf_minus, zorder=2, linewidth=3)
 
 plt.axhline(y=0, linestyle='--', color='gray', linewidth=1, zorder=0)
 
 # Labels and styling
-plt.xlabel("Temperature", fontsize=14)
-plt.ylabel("Average Magnetization", fontsize=14)
+plt.xlabel("Temperature", fontsize=18)
+plt.ylabel("Average Magnetization", fontsize=18)
 
 # Increase tick label size
-plt.tick_params(axis='both', which='major', labelsize=14)
+plt.tick_params(axis='both', which='major', labelsize=18)
 
 # Set legend to center left position
-plt.legend(fontsize=14, loc='center left')
+plt.legend(fontsize=18, loc='center left')
 
 plt.savefig("mean_field.png", bbox_inches="tight", dpi=300)
 
 plt.show()
+
+
+
+import json
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+
+def load_processed_results(json_path):
+    """
+    Load processed results from a JSON file into a dictionary format.
+    """
+    with open(json_path, 'r') as f:
+        data = json.load(f)
+    
+    # Convert lists back to numpy arrays for numerical data
+    processed_results = {
+        'temperatures': np.array(data['temperatures']),
+        'average_magnetizations': np.array(data['average_magnetizations']),
+        'average_magnetizations_std_errors': np.array(data['average_magnetizations_std_errors']),
+        'm_plus_avgs': np.array(data['m_plus_avgs']),
+        'm_plus_avgs_std_errors': np.array(data['m_plus_avgs_std_errors']),
+        'm_minus_avgs': np.array(data['m_minus_avgs']),
+        'm_minus_avgs_std_errors': np.array(data['m_minus_avgs_std_errors']),
+        # other fields remain the same
+    }
+    
+    return processed_results
+
+def load_and_replace_results(original_json_path, replacement_json_path):
+    """
+    Load processed results from the original JSON file, replace values at a specific temperature
+    with values from the replacement JSON file.
+    """
+    # Load both datasets
+    with open(original_json_path, 'r') as f:
+        original_data = json.load(f)
+    
+    with open(replacement_json_path, 'r') as f:
+        replacement_data = json.load(f)
+    
+    # Find the index of the matching temperature in the original data
+    target_temp = replacement_data['temperatures'][0]
+    
+    try:
+        index_to_replace = original_data['temperatures'].index(target_temp)
+        print(f"Found exact match for temperature {target_temp} at index {index_to_replace}")
+    except ValueError:
+        # If exact temperature not found, find the closest one
+        temperatures = original_data['temperatures']
+        index_to_replace = min(range(len(temperatures)), key=lambda i: abs(temperatures[i] - target_temp))
+        print(f"No exact match found. Using closest temperature {temperatures[index_to_replace]} at index {index_to_replace}")
+    
+    # Replace all values at the identified index
+    for key in original_data:
+        if key != 'temperatures':  # Keep original temperature grid
+            if key in replacement_data:
+                original_data[key][index_to_replace] = replacement_data[key][0]
+    
+    # Convert lists to numpy arrays
+    processed_results = {
+        'temperatures': np.array(original_data['temperatures']),
+        'average_magnetizations': np.array(original_data['average_magnetizations']),
+        'average_magnetizations_std_errors': np.array(original_data['average_magnetizations_std_errors']),
+        'm_plus_avgs': np.array(original_data['m_plus_avgs']),
+        'm_plus_avgs_std_errors': np.array(original_data['m_plus_avgs_std_errors']),
+        'm_minus_avgs': np.array(original_data['m_minus_avgs']),
+        'm_minus_avgs_std_errors': np.array(original_data['m_minus_avgs_std_errors']),
+        # other fields remain the same
+    }
+    
+    return processed_results
+
+def solve_m_plus(N, T, J_b, h, Js, m0, tol=1e-8, max_iter=1000):
+    """
+    Solve the mean field equation for magnetization with positive initial condition.
+    """
+    Jp = J_b*(N-1)
+    beta = 1.0 / T
+    m = m0
+    for _ in range(max_iter):
+        m_new = np.tanh(beta * (h + Js + Jp * m))
+        if abs(m_new - m) < tol:
+            return m_new
+        m = m_new
+    return m  # return the last iteration if convergence criterion isn't met
+
+# Main plotting function
+def plot_magnetization_with_mean_field(data_path, crit_data_path, save_path=None):
+    # Load data
+    combined_results = load_and_replace_results(data_path, crit_data_path)
+    results = combined_results
+    temps = results['temperatures']
+    avg_mag = results['average_magnetizations']
+    avg_mag_err = results['average_magnetizations_std_errors']
+    m_plus = results['m_plus_avgs']
+    m_minus = results['m_minus_avgs']
+    m_plus_err = results['m_plus_avgs_std_errors']
+    m_minus_err = results['m_minus_avgs_std_errors']
+
+    # Parameters for mean field calculations
+    L = 100  
+    N = L**2
+    J_b = 1/(N-1)
+    J_s = 1.01
+    h_b = -1
+    h_s = N
+    m0_plus = 1
+    m0_minus = -1
+
+    # Temperature range for mean field theory
+    T_values = np.linspace(0.1, 1.5, 50)
+    m_plus_mf = np.zeros_like(T_values)
+    m_minus_mf = np.zeros_like(T_values)
+
+    # Calculate mean field predictions
+    for i, T in enumerate(T_values):
+        m_plus_mf[i] = solve_m_plus(N, T, J_b, h_b, J_s, m0_plus, tol=1e-8, max_iter=1000)
+        m_minus_mf[i] = solve_m_plus(N, T, J_b, h_b, J_s, m0_minus, tol=1e-8, max_iter=1000)
+
+    # Find where m_minus becomes positive
+    first_positive_index = np.argmax(m_minus_mf > 0)
+    
+    # Create subplots
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5), gridspec_kw={'width_ratios': [1, 1]})
+    
+    # Define colors
+    color_avg = 'darkblue'
+    color_plus = 'blue'
+    color_minus = 'red'
+    color_mf_plus = 'gold'
+    color_mf_minus = 'cyan'
+
+    # Plot 1: Average Magnetization
+    ax1.errorbar(temps, avg_mag, yerr=avg_mag_err, marker="o", 
+                 label="Average \nMagnetization", capsize=8, markersize=8, 
+                 color=color_avg, linewidth=5)
+    
+    # Add horizontal line at y=0
+    ax1.axhline(y=0, linestyle='--', color='gray', linewidth=2, zorder=0)
+    
+    # Labels and styling for first plot
+    ax1.set_xlabel("Temperature", fontsize=22)
+    ax1.set_ylabel("Average Magnetization", fontsize=22)
+    ax1.tick_params(axis='both', which='major', labelsize=22)
+
+    ax1.legend(fontsize=20, loc='best')
+
+    # Plot 2: m+ and m- with mean field
+    ax2.errorbar(temps, m_plus, yerr=m_plus_err, marker="o", label=r"$m_+$",
+                 capsize=8, markersize=8, color=color_plus, zorder=1, linewidth=5)
+    ax2.errorbar(temps, m_minus, yerr=m_minus_err, marker="s", label=r"$m_-$",
+                 capsize=8, markersize=8, color=color_minus, zorder=1, linewidth=5)
+
+    # Add mean field curves
+    ax2.plot(T_values, m_plus_mf, label=r'$m>0$ mean field',
+             linestyle=(0, (4, 2)), color=color_mf_plus, zorder=2, linewidth=3)
+    ax2.plot(T_values[:first_positive_index], m_minus_mf[:first_positive_index],
+             label=r'$m<0$ mean field', linestyle=(0, (4, 2)), color=color_mf_minus, zorder=2, linewidth=3)
+
+    # Add horizontal line at y=0
+    ax2.axhline(y=0, linestyle='--', color='gray', linewidth=2, zorder=0)
+
+    # Labels and styling for second plot
+    ax2.set_xlabel("Temperature", fontsize=22)
+    ax2.set_ylabel("Average Magnetization", fontsize=22)
+    ax2.tick_params(axis='both', which='major', labelsize=22)
+
+    ax2.legend(fontsize=19, loc='best')
+
+    # Add labels for the subplots
+    ax1.text(0.9, 0.9, "(a)", transform=ax1.transAxes, fontsize=20, fontweight='bold')
+    ax2.text(0.9, 0.9, "(b)", transform=ax2.transAxes, fontsize=20, fontweight='bold')
+
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, bbox_inches="tight", dpi=300)
+    
+    plt.show()
+    
+    return fig, (ax1, ax2)
+
+# Usage example
+if __name__ == "__main__":
+    path_ratio_500 = r"C:\Users\frase\Documents\Durham\4th Year\1Project\Results_2\simulation_results\fully_connected\ratio\ratio_50.0\20250320_094211_J_s_1.01_h_s_10000\numerical_results.json"
+    crit_ratio_path_500 = r"C:\Users\frase\Documents\Durham\4th Year\1Project\Results_2\simulation_results\fully_connected\ratio\ratio_50.0\20250327_181015_J_s_1.01_h_s_10000\numerical_results.json"
+    
+    plot_magnetization_with_mean_field(path_ratio_500, crit_ratio_path_500, "magnetization_mean_field_subplot.png")
